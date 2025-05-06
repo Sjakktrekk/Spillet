@@ -83,23 +83,41 @@ BEGIN
       icon TEXT,
       reward TEXT,
       difficulty TEXT CHECK (difficulty IN ('lett', 'medium', 'vanskelig')),
-      total INTEGER DEFAULT 1
+      total INTEGER DEFAULT 1,
+      stat_key TEXT
     );
 
     -- Legg til kommentar for tabellen
     COMMENT ON TABLE public.achievements IS 'Hovedtabell med alle achievements i spillet';
     
     -- Sett inn noen grunnleggende achievements
-    INSERT INTO public.achievements (id, name, description, category, icon, reward, difficulty, total) VALUES
-      ('login1', 'Eventyrets begynnelse', 'Logg inn for første gang', 'generelt', '🏆', '50 XP', 'lett', 1),
-      ('login10', 'Dedikert spiller', 'Logg inn 10 ganger', 'generelt', '🌟', '100 XP, 50 Gull', 'medium', 10),
-      ('visit3', 'Reisende', 'Besøk 3 forskjellige byer', 'utforskning', '🧭', '100 XP, Tittel: Reisende', 'medium', 3),
-      ('quest5', 'Oppdragstaker', 'Fullfør 5 oppdrag', 'oppdrag', '📜', '150 XP, Tittel: Oppdragstaker', 'medium', 5),
-      ('quest10', 'Profesjonell oppdragstaker', 'Fullfør 10 oppdrag', 'oppdrag', '📚', '300 XP, Tittel: Oppdragsmester', 'vanskelig', 10),
-      ('item5', 'Samleren', 'Samle 5 sjeldne gjenstander', 'inventar', '💎', '200 XP, Tittel: Samler', 'medium', 5),
-      ('msg50', 'Sosial sommerfugl', 'Send 50 meldinger i chat', 'sosialt', '💬', '100 XP, Tittel: Den Sosiale', 'medium', 50),
-      ('gold1000', 'Mesterhandler', 'Tjen 1000 gull', 'handel', '💰', '250 XP, Tittel: Gullsmed', 'vanskelig', 1000),
-      ('monster100', 'Monstertemmeren', 'Beseire 100 monstre', 'kamp', '⚔️', '500 XP, Tittel: Monsterslakteren', 'vanskelig', 100);
+    INSERT INTO public.achievements (id, name, description, category, icon, reward, difficulty, total, stat_key) VALUES
+      ('login1', 'Eventyrets begynnelse', 'Logg inn for første gang', 'generelt', '🏆', '50 XP', 'lett', 1, 'login_count'),
+      ('login10', 'Dedikert spiller', 'Logg inn 10 ganger', 'generelt', '🌟', '100 XP, 50 Gull', 'medium', 10, 'login_count'),
+      ('visit3', 'Reisende', 'Besøk 3 forskjellige byer', 'utforskning', '🧭', '100 XP, Tittel: Reisende', 'medium', 3, 'cities_visited'),
+      ('quest5', 'Oppdragstaker', 'Fullfør 5 oppdrag', 'oppdrag', '📜', '150 XP, Tittel: Oppdragstaker', 'medium', 5, 'quests_completed'),
+      ('quest10', 'Profesjonell oppdragstaker', 'Fullfør 10 oppdrag', 'oppdrag', '📚', '300 XP, Tittel: Oppdragsmester', 'vanskelig', 10, 'quests_completed'),
+      ('item5', 'Samleren', 'Samle 5 sjeldne gjenstander', 'inventar', '💎', '200 XP, Tittel: Samler', 'medium', 5, 'items_collected'),
+      ('msg50', 'Sosial sommerfugl', 'Send 50 meldinger i chat', 'sosialt', '💬', '100 XP, Tittel: Den Sosiale', 'medium', 50, 'messages_count'),
+      ('gold1000', 'Mesterhandler', 'Tjen 1000 gull', 'handel', '💰', '250 XP, Tittel: Gullsmed', 'vanskelig', 1000, 'gold_earned'),
+      ('monster100', 'Monstertemmeren', 'Beseire 100 monstre', 'kamp', '⚔️', '500 XP, Tittel: Monsterslakteren', 'vanskelig', 100, 'monsters_killed');
+  END IF;
+
+  -- Legg til stat_key kolonne hvis den ikke finnes
+  IF NOT EXISTS (
+    SELECT FROM information_schema.columns 
+    WHERE table_name = 'achievements' AND column_name = 'stat_key'
+  ) THEN
+    ALTER TABLE public.achievements ADD COLUMN stat_key TEXT;
+    
+    -- Oppdater eksisterende achievements med riktige stat_key verdier
+    UPDATE public.achievements SET stat_key = 'login_count' WHERE id IN ('login1', 'login10');
+    UPDATE public.achievements SET stat_key = 'cities_visited' WHERE id = 'visit3';
+    UPDATE public.achievements SET stat_key = 'quests_completed' WHERE id IN ('quest5', 'quest10');
+    UPDATE public.achievements SET stat_key = 'items_collected' WHERE id = 'item5';
+    UPDATE public.achievements SET stat_key = 'messages_count' WHERE id = 'msg50';
+    UPDATE public.achievements SET stat_key = 'gold_earned' WHERE id = 'gold1000';
+    UPDATE public.achievements SET stat_key = 'monsters_killed' WHERE id = 'monster100';
   END IF;
 END $$;
 
@@ -117,6 +135,10 @@ BEGIN
       monsters_killed INTEGER DEFAULT 0,
       gold_earned INTEGER DEFAULT 0,
       cities_visited JSONB DEFAULT '[]'::jsonb,
+      distance_traveled INTEGER DEFAULT 0,
+      items_crafted INTEGER DEFAULT 0,
+      resources_gathered INTEGER DEFAULT 0,
+      battles_won INTEGER DEFAULT 0,
       last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       UNIQUE(user_id)
     );
@@ -126,6 +148,35 @@ BEGIN
 
     -- Opprett indeks for raskere spørringer
     CREATE INDEX user_stats_user_id_idx ON public.user_stats(user_id);
+  END IF;
+  
+  -- Legg til nye statistikkfelter hvis de ikke finnes
+  IF NOT EXISTS (
+    SELECT FROM information_schema.columns 
+    WHERE table_name = 'user_stats' AND column_name = 'distance_traveled'
+  ) THEN
+    ALTER TABLE public.user_stats ADD COLUMN distance_traveled INTEGER DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT FROM information_schema.columns 
+    WHERE table_name = 'user_stats' AND column_name = 'items_crafted'
+  ) THEN
+    ALTER TABLE public.user_stats ADD COLUMN items_crafted INTEGER DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT FROM information_schema.columns 
+    WHERE table_name = 'user_stats' AND column_name = 'resources_gathered'
+  ) THEN
+    ALTER TABLE public.user_stats ADD COLUMN resources_gathered INTEGER DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT FROM information_schema.columns 
+    WHERE table_name = 'user_stats' AND column_name = 'battles_won'
+  ) THEN
+    ALTER TABLE public.user_stats ADD COLUMN battles_won INTEGER DEFAULT 0;
   END IF;
 END $$;
 

@@ -513,7 +513,7 @@ export default function Inventory() {
   
   // Legg til en hjelpefunksjon for å generere en tilfeldig attributt
   const getRandomAttribute = () => {
-    const attributes = ['Styrke', 'Smidighet', 'Magi', 'Utholdenhet', 'Kunnskap'];
+    const attributes = ['Utholdenhet', 'Helse'];
     return attributes[Math.floor(Math.random() * attributes.length)];
   };
 
@@ -561,11 +561,7 @@ export default function Inventory() {
         quantity: 1,
         equipped: false,
         attributes: {
-          styrke: randomItem.strength || 0,
-          magi: randomItem.magic || 0,
-          smidighet: randomItem.agility || 0,
-          helse: randomItem.vitality_bonus || 0,
-          kunnskap: randomItem.knowledge || 0
+          helse: randomItem.vitality_bonus || 0
         }
       };
 
@@ -593,23 +589,16 @@ export default function Inventory() {
   // Legg til denne funksjonen før return-statementet
   const calculateTotalBonuses = () => {
     const totalBonuses = {
-      styrke: 0,
-      smidighet: 0,
-      magi: 0,
       utholdenhet: 0,
-      helse: 0,
-      kunnskap: 0
+      helse: 0
     };
 
     // Gå gjennom alle utstyrte gjenstander
     inventory.items.filter(item => item.equipped).forEach(item => {
       if (item.attributes) {
         Object.entries(item.attributes).forEach(([attr, value]) => {
-          // Håndter både 'knowledge' og 'kunnskap'
           const attrLower = attr.toLowerCase();
-          if (attrLower === 'knowledge') {
-            totalBonuses.kunnskap += value;
-          } else if (totalBonuses.hasOwnProperty(attrLower)) {
+          if (totalBonuses.hasOwnProperty(attrLower)) {
             totalBonuses[attrLower] += value;
           }
         });
@@ -834,33 +823,17 @@ export default function Inventory() {
                             {Object.entries(equippedItem.attributes)
                               .sort(([a], [b]) => {
                                 const order = {
-                                  'magi': 1,
-                                  'styrke': 2,
-                                  'smidighet': 3,
-                                  'knowledge': 4,
-                                  'kunnskap': 4,
-                                  'helse': 5,
-                                  'utholdenhet': 6
+                                  'helse': 1,
+                                  'utholdenhet': 2
                                 };
                                 return (order[a.toLowerCase()] || 99) - (order[b.toLowerCase()] || 99);
                               })
                               .map(([attr, value]) => {
                                 if (value <= 0) return null;
                                 
-                                const isAfterMainStats = ['helse', 'utholdenhet'].includes(attr.toLowerCase());
-                                
                                 switch(attr.toLowerCase()) {
-                                  case 'magi':
-                                    return <div key={attr} className="text-blue-400">+{value} Magi</div>;
-                                  case 'styrke':
-                                    return <div key={attr} className="text-red-400">+{value} Styrke</div>;
-                                  case 'smidighet':
-                                    return <div key={attr} className="text-green-400">+{value} Smidighet</div>;
-                                  case 'knowledge':
-                                  case 'kunnskap':
-                                    return <div key={attr} className="text-purple-400">+{value} Kunnskap</div>;
                                   case 'helse':
-                                    return <div key={attr} className={`text-pink-400 ${isAfterMainStats ? 'mt-2' : ''}`}>+{value} Helse</div>;
+                                    return <div key={attr} className="text-pink-400">+{value} Helse</div>;
                                   case 'utholdenhet':
                                     return <div key={attr} className="text-yellow-400">+{value} Utholdenhet</div>;
                                   default:
@@ -970,34 +943,17 @@ export default function Inventory() {
                           .sort(([a], [b]) => {
                             // Definer rekkefølgen vi ønsker
                             const order = {
-                              'magi': 1,
-                              'styrke': 2,
-                              'smidighet': 3,
-                              'knowledge': 4,
-                              'kunnskap': 4,
-                              'helse': 5,
-                              'utholdenhet': 6
+                              'helse': 1,
+                              'utholdenhet': 2
                             };
                             return (order[a.toLowerCase()] || 99) - (order[b.toLowerCase()] || 99);
                           })
                           .map(([attr, value]) => {
                             if (value <= 0) return null; // Ikke vis attributter med verdi 0 eller mindre
                             
-                            // Legg til mellomrom før helse
-                            const isAfterMainStats = ['helse', 'utholdenhet'].includes(attr.toLowerCase());
-                            
                             switch(attr.toLowerCase()) {
-                              case 'magi':
-                                return <div key={attr} className="text-blue-400">+{value} Magi</div>;
-                              case 'styrke':
-                                return <div key={attr} className="text-red-400">+{value} Styrke</div>;
-                              case 'smidighet':
-                                return <div key={attr} className="text-green-400">+{value} Smidighet</div>;
-                              case 'knowledge':
-                              case 'kunnskap':
-                                return <div key={attr} className="text-purple-400">+{value} Kunnskap</div>;
                               case 'helse':
-                                return <div key={attr} className={`text-pink-400 ${isAfterMainStats ? 'mt-2' : ''}`}>+{value} Helse</div>;
+                                return <div key={attr} className="text-pink-400">+{value} Helse</div>;
                               case 'utholdenhet':
                                 return <div key={attr} className="text-yellow-400">+{value} Utholdenhet</div>;
                               default:

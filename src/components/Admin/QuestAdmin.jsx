@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { SKILL_DATA } from '../../hooks/useSkills';
 
 const QuestAdmin = ({ cities }) => {
   const [quests, setQuests] = useState([]);
@@ -10,11 +11,19 @@ const QuestAdmin = ({ cities }) => {
     level: 1,
     reward_gold: 0,
     reward_xp: 0,
+    reward_skill: null,
     location: '',
     quest_type: 'main',
     reward_items: []
   });
-
+  
+  // Skill reward state
+  const [selectedSkill, setSelectedSkill] = useState('');
+  const [skillAmount, setSkillAmount] = useState(1);
+  
+  // Liste over tilgjengelige ferdigheter
+  const skillOptions = Object.keys(SKILL_DATA);
+  
   useEffect(() => {
     fetchQuests();
   }, []);
@@ -36,9 +45,21 @@ const QuestAdmin = ({ cities }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Oppdater reward_skill basert på valgt ferdighet og mengde
+    let questData = { ...newQuest };
+    
+    if (selectedSkill && skillAmount > 0) {
+      questData.reward_skill = {
+        skill_name: selectedSkill,
+        amount: skillAmount
+      };
+    } else {
+      questData.reward_skill = null;
+    }
+    
     const { error } = await supabase
       .from('quests')
-      .insert([newQuest]);
+      .insert([questData]);
 
     if (error) {
       toast.error('Kunne ikke opprette oppdrag');
@@ -52,10 +73,13 @@ const QuestAdmin = ({ cities }) => {
       level: 1,
       reward_gold: 0,
       reward_xp: 0,
+      reward_skill: null,
       location: '',
       quest_type: 'main',
       reward_items: []
     });
+    setSelectedSkill('');
+    setSkillAmount(1);
     fetchQuests();
   };
 
@@ -82,14 +106,14 @@ const QuestAdmin = ({ cities }) => {
     const { error } = await supabase
       .from('quests')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Sletter alle oppdrag
+      .neq('id', 'placeholder'); // Sletter alle
 
     if (error) {
       toast.error('Kunne ikke slette oppdrag');
       return;
     }
 
-    toast.success('Alle oppdrag er slettet');
+    toast.success('Alle oppdrag slettet');
     fetchQuests();
   };
 
@@ -176,6 +200,36 @@ const QuestAdmin = ({ cities }) => {
             </div>
             
             <div>
+              <label className="block text-sm font-medium text-gray-300">Belønning (Ferdighetspoeng)</label>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={selectedSkill}
+                  onChange={(e) => setSelectedSkill(e.target.value)}
+                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                    focus:border-yellow-500 focus:ring-yellow-500"
+                >
+                  <option value="">Ingen ferdighetspoeng</option>
+                  {skillOptions.map(skill => (
+                    <option key={skill} value={skill}>{skill}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  value={skillAmount}
+                  min="1"
+                  max="10"
+                  onChange={(e) => setSkillAmount(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                    focus:border-yellow-500 focus:ring-yellow-500"
+                  disabled={!selectedSkill}
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {selectedSkill ? `Legg til ${skillAmount} ferdighetspoeng i ${selectedSkill}` : 'Velg en ferdighet for å gi ferdighetspoeng'}
+              </p>
+            </div>
+            
+            <div>
               <label className="block text-sm font-medium text-gray-300">Lokasjon</label>
               <select
                 value={newQuest.location}
@@ -223,35 +277,41 @@ const QuestAdmin = ({ cities }) => {
       {/* Eksisterende oppdrag */}
       <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
         <h3 className="text-lg font-semibold mb-4 text-yellow-400">Eksisterende oppdrag</h3>
-        <div className="space-y-4">
-          {quests.map(quest => (
-            <div 
-              key={quest.id} 
-              className="bg-gray-700 p-4 rounded-lg border border-gray-600 hover:border-gray-500 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-lg font-medium text-white">{quest.title}</h4>
-                  <p className="text-sm text-gray-300 mt-1">{quest.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-4">
-                    <span className="text-sm text-gray-400">Nivå: {quest.level}</span>
-                    <span className="text-sm text-yellow-400">Gull: {quest.reward_gold}</span>
-                    <span className="text-sm text-blue-400">XP: {quest.reward_xp}</span>
-                    <span className="text-sm text-gray-400">Lokasjon: {quest.location}</span>
-                    <span className="text-sm text-gray-400">Type: {quest.quest_type}</span>
+        <table className="w-full text-sm border-collapse">
+          <thead className="bg-gray-800">
+            <tr>
+              <th className="py-2 px-3 text-left">Tittel</th>
+              <th className="py-2 px-3 text-left">Nivå</th>
+              <th className="py-2 px-3 text-left">Belønning</th>
+              <th className="py-2 px-3 text-left">Handlinger</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quests.map(quest => (
+              <tr key={quest.id} className="border-t border-gray-700">
+                <td className="py-2 px-3">{quest.title}</td>
+                <td className="py-2 px-3">{quest.level}</td>
+                <td className="py-2 px-3">
+                  <div>
+                    <span className="text-yellow-400">{quest.reward_gold}</span> gull,{' '}
+                    <span className="text-blue-400">{quest.reward_xp}</span> XP
+                    {quest.reward_skill && (
+                      <>, <span className="text-green-400">+{quest.reward_skill.amount} {quest.reward_skill.skill_name}</span></>
+                    )}
                   </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(quest.id)}
-                  className="text-red-400 hover:text-red-300 bg-gray-800 p-2 rounded-full
-                    transition-colors duration-200"
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+                </td>
+                <td className="py-2 px-3">
+                  <button 
+                    onClick={() => handleDelete(quest.id)}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    Slett
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

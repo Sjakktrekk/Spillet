@@ -50,16 +50,34 @@ export default function useCharacter() {
     };
   };
 
+  // Beregn total forsvarsverdi fra utstyr
+  const calculateTotalDefense = (equipment) => {
+    if (!equipment) return 0;
+    
+    let totalDefense = 0;
+    
+    // Gå gjennom alle utstyrte gjenstander
+    Object.values(equipment).forEach(item => {
+      if (item && item.defense) {
+        totalDefense += item.defense;
+      }
+    });
+    
+    return totalDefense;
+  };
+
   // Oppdater karakterens helse og energi basert på utstyr
   const updateCharacterStats = (char) => {
     if (!char) return char;
 
     const equipmentBonuses = calculateEquipmentBonuses(char.equipment);
+    const totalDefense = calculateTotalDefense(char.equipment);
     
     return {
       ...char,
       max_health: (char.base_max_health || 100) + equipmentBonuses.health,
       max_energy: (char.base_max_energy || 100) + equipmentBonuses.energy,
+      defense: totalDefense,
       // Sørg for at nåværende helse/energi ikke overstiger maks
       health: Math.min(char.health || char.max_health, (char.base_max_health || 100) + equipmentBonuses.health),
       energy: Math.min(char.energy || char.max_energy, (char.base_max_energy || 100) + equipmentBonuses.energy)
@@ -146,11 +164,6 @@ export default function useCharacter() {
         max_health: 100,
         energy: 75,
         max_energy: 100,
-        // Beholder attributter for bakoverkompatibilitet
-        strength: 5,
-        knowledge: 5,
-        agility: 5,
-        magic: 5,
         skill_points: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -267,7 +280,7 @@ export default function useCharacter() {
     }
   };
 
-  // Denne funksjonen beholdes midlertidig for bakoverkompatibilitet, men brukes ikke aktivt
+  // Denne funksjonen fjernes siden attributter ikke lenger brukes
   const useSkillPoint = async (skill) => {
     console.warn('useSkillPoint er foreldet - bruk increaseSkillProgress fra useSkills i stedet');
     return false;
@@ -281,7 +294,9 @@ export default function useCharacter() {
     addCoins,
     removeCoins,
     addExperience,
+    // useSkillPoint beholdes i API men er dummy-funksjon for bakoverkompatibilitet
     useSkillPoint,
-    calculateExperienceForLevel
+    calculateExperienceForLevel,
+    calculateTotalDefense
   };
 } 

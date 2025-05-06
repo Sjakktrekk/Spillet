@@ -23,15 +23,11 @@ BEGIN
         FROM information_schema.columns 
         WHERE table_schema = 'public' 
         AND table_name = 'items' 
-        AND column_name = 'strength_bonus'
+        AND column_name = 'vitality_bonus'
       ) THEN
         UPDATE public.items
         SET attributes = jsonb_build_object(
-          'Nærkamp', COALESCE(strength_bonus, 0),
-          'Skyteferdighet', COALESCE(dexterity_bonus, 0),
-          'Kunnskap', COALESCE(intelligence_bonus, 0),
-          'Magi', COALESCE(mana_bonus, 0),
-          'Utholdenhet', COALESCE(health_bonus, 0)
+          'Utholdenhet', COALESCE(vitality_bonus, 0)
         );
         RAISE NOTICE 'Attributter konvertert til JSON-format';
       ELSE

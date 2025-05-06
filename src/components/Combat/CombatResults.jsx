@@ -183,6 +183,15 @@ const CombatResults = ({ results, character, damageTaken, onContinue }) => {
               </span>
             </div>
             
+            {character.defense > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-300">Forsvar:</span>
+                <span className="text-blue-400">
+                  {character.defense} ({Math.min(50, Math.round(character.defense))}% reduksjon)
+                </span>
+              </div>
+            )}
+            
             <div className="flex justify-between">
               <span className="text-gray-300">Gjenværende helse:</span>
               <span className={`${

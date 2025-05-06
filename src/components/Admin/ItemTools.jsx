@@ -19,13 +19,10 @@ const ItemTools = () => {
     rarity: 'common',
     defense: 0,
     damage: 0,
-    knowledge: 0,
-    strength: 0,
-    magic: 0,
-    agility: 0,
     vitality_bonus: 0,
     value: 0,
-    image_url: ''
+    image_url: '',
+    attributes: {}
   });
 
   // Legg til konstant for slot-typer
@@ -196,10 +193,6 @@ const ItemTools = () => {
         rarity: 'common',
         defense: 0,
         damage: 0,
-        knowledge: 0,
-        strength: 0,
-        magic: 0,
-        agility: 0,
         vitality_bonus: 0,
         value: 0,
         image_url: ''
@@ -402,50 +395,6 @@ const ItemTools = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300">Kunnskap</label>
-              <input
-                type="number"
-                value={newItem.knowledge}
-                onChange={(e) => setNewItem({ ...newItem, knowledge: parseInt(e.target.value) || 0 })}
-                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                  focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Styrke</label>
-              <input
-                type="number"
-                value={newItem.strength}
-                onChange={(e) => setNewItem({ ...newItem, strength: parseInt(e.target.value) || 0 })}
-                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                  focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Magi</label>
-              <input
-                type="number"
-                value={newItem.magic}
-                onChange={(e) => setNewItem({ ...newItem, magic: parseInt(e.target.value) || 0 })}
-                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                  focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Smidighet</label>
-              <input
-                type="number"
-                value={newItem.agility}
-                onChange={(e) => setNewItem({ ...newItem, agility: parseInt(e.target.value) || 0 })}
-                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                  focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-300">Vitalitet bonus</label>
               <input
                 type="number"
@@ -598,18 +547,6 @@ const ItemTools = () => {
                     {item.defense > 0 && (
                       <p>Forsvar: <span className="text-blue-400">{item.defense}</span></p>
                     )}
-                    {item.magic > 0 && (
-                      <p>Magi: <span className="text-blue-400">+{item.magic}</span></p>
-                    )}
-                    {item.strength > 0 && (
-                      <p>Styrke: <span className="text-red-400">+{item.strength}</span></p>
-                    )}
-                    {item.agility > 0 && (
-                      <p>Smidighet: <span className="text-green-400">+{item.agility}</span></p>
-                    )}
-                    {item.knowledge > 0 && (
-                      <p>Kunnskap: <span className="text-purple-400">+{item.knowledge}</span></p>
-                    )}
                     {item.vitality_bonus > 0 && (
                       <p>Vitalitet bonus: <span className="text-yellow-400">+{item.vitality_bonus}</span></p>
                     )}
@@ -734,50 +671,6 @@ const ItemTools = () => {
                   type="number"
                   value={editingItem.defense}
                   onChange={(e) => setEditingItem({ ...editingItem, defense: parseInt(e.target.value) || 0 })}
-                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                    focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Kunnskap</label>
-                <input
-                  type="number"
-                  value={editingItem.knowledge}
-                  onChange={(e) => setEditingItem({ ...editingItem, knowledge: parseInt(e.target.value) || 0 })}
-                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                    focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Styrke</label>
-                <input
-                  type="number"
-                  value={editingItem.strength}
-                  onChange={(e) => setEditingItem({ ...editingItem, strength: parseInt(e.target.value) || 0 })}
-                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                    focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Magi</label>
-                <input
-                  type="number"
-                  value={editingItem.magic}
-                  onChange={(e) => setEditingItem({ ...editingItem, magic: parseInt(e.target.value) || 0 })}
-                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                    focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Smidighet</label>
-                <input
-                  type="number"
-                  value={editingItem.agility}
-                  onChange={(e) => setEditingItem({ ...editingItem, agility: parseInt(e.target.value) || 0 })}
                   className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
                     focus:border-blue-500 focus:ring-blue-500"
                 />

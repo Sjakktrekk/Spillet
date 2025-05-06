@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 
 export default function Character() {
   const { user, loading: authLoading } = useAuth()
-  const { character, loading: characterLoading, useSkillPoint, calculateExperienceForLevel } = useCharacter()
+  const { character, loading: characterLoading, useSkillPoint, calculateExperienceForLevel, calculateTotalDefense } = useCharacter()
   const { 
     skills, 
     loading: skillsLoading, 
@@ -130,12 +130,13 @@ export default function Character() {
     return () => clearInterval(interval)
   }, [user, authLoading, navigate, achievementTracker])
 
-  // Håndter tildeling av attributtpoeng
+  // Fjerner Modal for attributtpoeng tildeling siden attributter ikke lenger brukes
   const handleAttributePointAssignment = async () => {
     if (!selectedAttribute) return;
     
     try {
-      await useSkillPoint(selectedAttribute);
+      // Denne funksjonen skal ikke lenger brukes
+      console.warn('Attributter er ikke lenger i bruk');
       setShowAttributeModal(false);
       setSelectedAttribute(null);
     } catch (error) {
@@ -186,28 +187,7 @@ export default function Character() {
     gold: character.coins || 50,
     playTime: '2 timer',
     activeQuests: activeQuests.length,
-    attributes: {
-      styrke: {
-        base: character.strength || 5,
-        bonus: 0,
-        total: character.strength || 5
-      },
-      kunnskap: {
-        base: character.knowledge || 5,
-        bonus: 0,
-        total: character.knowledge || 5
-      },
-      smidighet: {
-        base: character.agility || 5,
-        bonus: 0,
-        total: character.agility || 5
-      },
-      magi: {
-        base: character.magic || 5,
-        bonus: 0,
-        total: character.magic || 5
-      }
-    },
+    defense: character.defense || calculateTotalDefense(character.equipment) || 0,
     equipment: character.equipment || {
       head: null,
       chest: null,
@@ -376,6 +356,19 @@ export default function Character() {
                     ></div>
                   </div>
                 </div>
+                
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span>Forsvar</span>
+                    <span>{characterData.defense} ({Math.min(50, Math.round(characterData.defense))}% skadereduksjon)</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full" 
+                      style={{ width: `${Math.min(100, (characterData.defense / 100) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
               </div>
               
               <div className="mt-6">
@@ -523,7 +516,7 @@ export default function Character() {
               <div className="text-sm text-gray-400">Ferdigheter økes når du bruker dem aktivt i spillet (Maks nivå: 30)</div>
             </div>
             
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {skills.map(skill => {
                 const skillInfo = skillData[skill.skill_name];
                 if (!skillInfo) return null;
@@ -532,132 +525,64 @@ export default function Character() {
                 const rankInfo = getSkillRank(skill.level);
                 const rankDescription = getSkillRankDescription(skill.skill_name, skill.level);
                 
-                // Beregn prosent for hovedprogresjonslinjen
-                const totalProgressPercent = (skill.level / 30) * 100;
-                
                 // Beregn nødvendig fremgang for neste nivå
                 const requiredProgress = getRequiredProgressForLevel(skill.level);
                 
                 return (
-                  <div key={skill.id} className="bg-gray-700 p-5 rounded-lg border border-gray-600">
-                    {/* Ferdighetsheader */}
-                    <div className="flex items-center mb-3">
-                      <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mr-4 text-xl">
+                  <div key={skill.id} className="bg-gray-700 p-3 rounded-lg border border-gray-600 relative group">
+                    <div className="flex items-center">
+                      <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center mr-3 text-lg">
                         {skillInfo.icon}
                       </div>
+                      <div className="flex-grow">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-white">{skill.skill_name}</span>
+                          <span className="text-sm text-gray-300">Lvl {skill.level} <span className={`text-${rankInfo.color} font-semibold`}>({rankInfo.rank})</span></span>
+                        </div>
+                        <div className="w-full bg-gray-800 rounded-full h-2 mt-1">
+                          <div 
+                            className={`h-full bg-${skillInfo.color} rounded-full`}
+                            style={{ width: `${(skill.progress / requiredProgress) * 100}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                          <span></span>
+                          <span>{skill.progress}/{requiredProgress}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Tooltip med detaljert informasjon */}
+                    <div className="absolute z-10 invisible group-hover:visible bg-gray-900 border border-gray-600 rounded-lg p-4 shadow-xl w-72 left-0 mt-2 text-sm">
+                      <h3 className="font-bold text-lg text-white mb-2">{skill.skill_name} <span className={`text-${rankInfo.color}`}>({rankInfo.rank})</span></h3>
+                      <p className="text-gray-300 mb-3">{skillInfo.description}</p>
+                      
+                      {rankDescription && (
+                        <div className="mb-3">
+                          <span className={`text-${rankInfo.color} font-semibold`}>Nåværende status:</span> 
+                          <p className="text-gray-300">{rankDescription}</p>
+                        </div>
+                      )}
+                      
+                      <div className="mb-3">
+                        <span className="font-semibold text-gray-200">Primæreffekt:</span>
+                        <p className="text-gray-300">{skillInfo.primaryEffect}</p>
+                      </div>
+                      
+                      {skillInfo.secondaryEffects && skillInfo.secondaryEffects.length > 0 && (
+                        <div className="mb-3">
+                          <span className="font-semibold text-gray-200">Sekundæreffekter:</span>
+                          <ul className="list-disc pl-5 text-gray-300">
+                            {skillInfo.secondaryEffects.map((effect, idx) => (
+                              <li key={idx}>{effect}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
                       <div>
-                        <h3 className="font-bold text-xl text-white">{skill.skill_name}</h3>
-                        <div className="flex items-center">
-                          <span className={`text-${rankInfo.color} font-semibold`}>{rankInfo.rank}</span>
-                          <span className="mx-2 text-gray-400">•</span>
-                          <span className="text-gray-300">Nivå {skill.level}/30</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Beskrivelse */}
-                    <p className="text-gray-300 mb-4">{skillInfo.description}</p>
-                    
-                    {/* Ferdighetsstatus */}
-                    {rankDescription && (
-                      <div className="bg-gray-800 p-3 rounded-md mb-5 border border-gray-600">
-                        <p className="text-sm text-gray-300">
-                          <span className={`text-${rankInfo.color} font-semibold`}>Nåværende status:</span> {rankDescription}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {/* Nivåoversikt - forenklet */}
-                    <div className="mb-6">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-gray-400">Progresjon:</span>
-                        <span className="text-sm text-gray-400">Nivå {skill.level}/30</span>
-                      </div>
-                      
-                      {/* Hovedprogresjonslinje */}
-                      <div className="w-full bg-gray-800 h-3 rounded-full mb-1 relative">
-                        <div 
-                          className={`h-full bg-${skillInfo.color} rounded-full`}
-                          style={{ width: `${totalProgressPercent}%` }}
-                        ></div>
-                        
-                        {/* Milepæler */}
-                        {Object.keys(SKILL_RANKS).map(level => (
-                          parseInt(level) > 1 && (
-                            <div 
-                              key={level}
-                              className={`absolute top-0 bottom-0 w-0.5 ${
-                                skill.level >= parseInt(level) ? 'bg-white' : 'bg-gray-600'
-                              }`}
-                              style={{ 
-                                left: `${(parseInt(level) / 30) * 100}%`,
-                                transform: 'translateX(-50%)'
-                              }}
-                              title={`${SKILL_RANKS[level].rank} (Nivå ${level})`}
-                            ></div>
-                          )
-                        ))}
-                      </div>
-                      
-                      {/* Merker for milepæler */}
-                      <div className="flex justify-between mt-1 text-xs text-gray-500">
-                        {Object.keys(SKILL_RANKS).map(level => (
-                          <div key={level} className="flex flex-col items-center" style={{width: '14%'}}>
-                            <div 
-                              className={`text-xs font-semibold ${
-                                skill.level >= parseInt(level) ? `text-${SKILL_RANKS[level].color}` : 'text-gray-600'
-                              }`}
-                            >
-                              {level}
-                            </div>
-                            <div 
-                              className={`text-xs ${
-                                skill.level >= parseInt(level) ? `text-${SKILL_RANKS[level].color}` : 'text-gray-600'
-                              }`}
-                            >
-                              {SKILL_RANKS[level].rank}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Neste nivå framgang */}
-                    <div className="mt-3">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-gray-400">Fremgang til nivå {skill.level + 1}:</span>
-                        <span className="text-sm text-gray-400">{skill.progress}/{requiredProgress} poeng</span>
-                      </div>
-                      <div className="w-full bg-gray-800 rounded-full h-2">
-                        <div 
-                          className={`h-full bg-${skillInfo.color} rounded-full`}
-                          style={{ width: `${(skill.progress / requiredProgress) * 100}%` }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-500 mt-2">
-                        <div>
-                          <span className="font-semibold">Øker ved:</span> {skillInfo.levelsUpBy}
-                        </div>
-                        <div className="group relative">
-                          <button className="text-xs underline">
-                            Vis effekter
-                          </button>
-                          <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-lg hidden group-hover:block z-10">
-                            <p className="font-semibold text-yellow-400 text-xs">Hovedeffekt:</p>
-                            <p className="text-xs mb-2">{skillInfo.primaryEffect}</p>
-                            
-                            {skillInfo.secondaryEffects && skillInfo.secondaryEffects.length > 0 && (
-                              <div className="mt-1">
-                                <p className="font-semibold text-gray-400 text-xs">Tilleggseffekter:</p>
-                                <ul className="list-disc list-inside">
-                                  {skillInfo.secondaryEffects.map((effect, idx) => (
-                                    <li key={idx} className="text-xs text-gray-400">{effect}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        <span className="font-semibold text-gray-200">Øker ved:</span>
+                        <p className="text-gray-300">{skillInfo.levelsUpBy}</p>
                       </div>
                     </div>
                   </div>
@@ -753,71 +678,6 @@ export default function Character() {
                   </p>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Modal for attributtpoeng tildeling */}
-        {showAttributeModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg max-w-md w-full">
-              <h3 className="text-xl font-bold text-yellow-500 mb-4">Tildel Attributtpoeng</h3>
-              <p className="text-gray-300 mb-6">Velg hvilken attributt du vil øke med 1 poeng:</p>
-              
-              <div className="space-y-3 mb-6">
-                {Object.entries(characterData.attributes).map(([attr, data]) => (
-                  <button
-                    key={attr}
-                    onClick={() => setSelectedAttribute(attr)}
-                    className={`w-full p-3 rounded-lg flex items-center justify-between ${
-                      selectedAttribute === attr 
-                        ? 'bg-yellow-700 border border-yellow-500' 
-                        : 'bg-gray-700 border border-gray-600 hover:bg-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center mr-3 text-lg">
-                        {attr === 'styrke' && '💪'}
-                        {attr === 'smidighet' && '🏃'}
-                        {attr === 'kunnskap' && '🧠'}
-                        {attr === 'magi' && '✨'}
-                      </div>
-                      <div>
-                        <div className="font-medium capitalize">
-                          {attr === 'styrke' && 'Styrke'}
-                          {attr === 'smidighet' && 'Smidighet'}
-                          {attr === 'kunnskap' && 'Kunnskap'}
-                          {attr === 'magi' && 'Magi'}
-                        </div>
-                        <div className="text-sm text-gray-400">Nåværende: {data.total}</div>
-                      </div>
-                    </div>
-                    <div className="text-lg font-bold">
-                      {selectedAttribute === attr ? '✓' : '+1'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              
-              <div className="flex space-x-4">
-                <button 
-                  onClick={() => setShowAttributeModal(false)}
-                  className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-                >
-                  Avbryt
-                </button>
-                <button 
-                  onClick={handleAttributePointAssignment}
-                  disabled={!selectedAttribute}
-                  className={`flex-1 py-2 rounded transition-colors ${
-                    !selectedAttribute 
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                      : 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                  }`}
-                >
-                  Bekreft
-                </button>
-              </div>
             </div>
           </div>
         )}

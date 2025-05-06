@@ -384,11 +384,8 @@ export async function getCharacterItems(characterId) {
           defense,
           image_url,
           value,
-          knowledge,
-          strength,
-          magic,
-          agility,
-          vitality_bonus
+          vitality_bonus,
+          attributes
         )
       `)
       .eq('character_id', characterId);
@@ -403,14 +400,9 @@ export async function getCharacterItems(characterId) {
       ...item.items,
       quantity: item.quantity,
       equipped: item.equipped,
-      // Legg til attributes-objekt med norske navn
-      attributes: {
-        // Bruk kun norske navn for attributter
-        styrke: item.items.strength || 0,
-        magi: item.items.magic || 0,
-        smidighet: item.items.agility || 0,
-        helse: item.items.vitality_bonus || 0,
-        kunnskap: item.items.knowledge || 0
+      // Bruk attributes-objektet fra databasen eller opprett et tomt objekt
+      attributes: item.items.attributes || { 
+        helse: item.items.vitality_bonus || 0 
       }
     }));
 

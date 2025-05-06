@@ -29,6 +29,10 @@ BEGIN
       WHEN stat_key = 'items_collected' THEN items_collected
       WHEN stat_key = 'monsters_killed' THEN monsters_killed
       WHEN stat_key = 'gold_earned' THEN gold_earned
+      WHEN stat_key = 'distance_traveled' THEN distance_traveled
+      WHEN stat_key = 'items_crafted' THEN items_crafted
+      WHEN stat_key = 'resources_gathered' THEN resources_gathered
+      WHEN stat_key = 'battles_won' THEN battles_won
     END
   FROM public.user_stats 
   WHERE user_id = user_id_param;
@@ -45,6 +49,10 @@ BEGIN
       monsters_killed, 
       gold_earned,
       cities_visited,
+      distance_traveled,
+      items_crafted,
+      resources_gathered,
+      battles_won,
       last_updated
     ) VALUES (
       user_id_param,
@@ -55,17 +63,12 @@ BEGIN
       CASE WHEN stat_key = 'monsters_killed' THEN increment_amount ELSE 0 END,
       CASE WHEN stat_key = 'gold_earned' THEN increment_amount ELSE 0 END,
       '[]'::jsonb,
+      CASE WHEN stat_key = 'distance_traveled' THEN increment_amount ELSE 0 END,
+      CASE WHEN stat_key = 'items_crafted' THEN increment_amount ELSE 0 END,
+      CASE WHEN stat_key = 'resources_gathered' THEN increment_amount ELSE 0 END,
+      CASE WHEN stat_key = 'battles_won' THEN increment_amount ELSE 0 END,
       NOW()
     )
-    ON CONFLICT (user_id) DO UPDATE
-    SET
-      login_count = CASE WHEN stat_key = 'login_count' THEN user_stats.login_count + increment_amount ELSE user_stats.login_count END,
-      quests_completed = CASE WHEN stat_key = 'quests_completed' THEN user_stats.quests_completed + increment_amount ELSE user_stats.quests_completed END,
-      messages_count = CASE WHEN stat_key = 'messages_count' THEN user_stats.messages_count + increment_amount ELSE user_stats.messages_count END,
-      items_collected = CASE WHEN stat_key = 'items_collected' THEN user_stats.items_collected + increment_amount ELSE user_stats.items_collected END,
-      monsters_killed = CASE WHEN stat_key = 'monsters_killed' THEN user_stats.monsters_killed + increment_amount ELSE user_stats.monsters_killed END,
-      gold_earned = CASE WHEN stat_key = 'gold_earned' THEN user_stats.gold_earned + increment_amount ELSE user_stats.gold_earned END,
-      last_updated = NOW()
     RETURNING jsonb_build_object(
       'user_id', user_id,
       'stat_key', stat_key,
@@ -77,6 +80,10 @@ BEGIN
         WHEN stat_key = 'items_collected' THEN items_collected
         WHEN stat_key = 'monsters_killed' THEN monsters_killed
         WHEN stat_key = 'gold_earned' THEN gold_earned
+        WHEN stat_key = 'distance_traveled' THEN distance_traveled
+        WHEN stat_key = 'items_crafted' THEN items_crafted
+        WHEN stat_key = 'resources_gathered' THEN resources_gathered
+        WHEN stat_key = 'battles_won' THEN battles_won
       END
     ) INTO result;
   ELSE
@@ -89,6 +96,10 @@ BEGIN
       items_collected = CASE WHEN stat_key = 'items_collected' THEN items_collected + increment_amount ELSE items_collected END,
       monsters_killed = CASE WHEN stat_key = 'monsters_killed' THEN monsters_killed + increment_amount ELSE monsters_killed END,
       gold_earned = CASE WHEN stat_key = 'gold_earned' THEN gold_earned + increment_amount ELSE gold_earned END,
+      distance_traveled = CASE WHEN stat_key = 'distance_traveled' THEN distance_traveled + increment_amount ELSE distance_traveled END,
+      items_crafted = CASE WHEN stat_key = 'items_crafted' THEN items_crafted + increment_amount ELSE items_crafted END,
+      resources_gathered = CASE WHEN stat_key = 'resources_gathered' THEN resources_gathered + increment_amount ELSE resources_gathered END,
+      battles_won = CASE WHEN stat_key = 'battles_won' THEN battles_won + increment_amount ELSE battles_won END,
       last_updated = NOW()
     WHERE user_id = user_id_param
     RETURNING jsonb_build_object(
@@ -102,6 +113,10 @@ BEGIN
         WHEN stat_key = 'items_collected' THEN items_collected
         WHEN stat_key = 'monsters_killed' THEN monsters_killed
         WHEN stat_key = 'gold_earned' THEN gold_earned
+        WHEN stat_key = 'distance_traveled' THEN distance_traveled
+        WHEN stat_key = 'items_crafted' THEN items_crafted
+        WHEN stat_key = 'resources_gathered' THEN resources_gathered
+        WHEN stat_key = 'battles_won' THEN battles_won
       END
     ) INTO result;
   END IF;
@@ -116,25 +131,25 @@ $increment_user_stat$;
 CREATE OR REPLACE FUNCTION add_city_to_visited(
   user_id_param UUID,
   city_name TEXT
-) 
-RETURNS JSONB 
+)
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $add_city_to_visited$
 DECLARE
-  result JSONB;
   current_cities JSONB;
+  result JSONB;
 BEGIN
-  -- Hent nåværende byer
+  -- Hent nåværende byer for brukeren
   SELECT cities_visited INTO current_cities
-  FROM public.user_stats 
+  FROM public.user_stats
   WHERE user_id = user_id_param;
   
-  -- Hvis brukeren ikke har statistikk ennå, opprett ny
+  -- Hvis brukeren ikke har statistikk ennå
   IF current_cities IS NULL THEN
-    -- Opprett en ny rad med bare denne byen
+    -- Opprett en ny rad med initiell by
     INSERT INTO public.user_stats (
-      user_id, 
+      user_id,
       cities_visited,
       last_updated
     ) VALUES (
@@ -142,22 +157,14 @@ BEGIN
       jsonb_build_array(city_name),
       NOW()
     )
-    ON CONFLICT (user_id) DO UPDATE
-    SET
-      cities_visited = CASE 
-        WHEN NOT user_stats.cities_visited @> jsonb_build_array(city_name) 
-        THEN user_stats.cities_visited || jsonb_build_array(city_name)
-        ELSE user_stats.cities_visited
-      END,
-      last_updated = NOW()
     RETURNING jsonb_build_object(
       'user_id', user_id,
       'cities_visited', cities_visited
     ) INTO result;
   ELSE
-    -- Sjekk om byen allerede er besøkt
-    IF NOT current_cities @> jsonb_build_array(city_name) THEN
-      -- Legg til den nye byen
+    -- Sjekk om byen allerede er i listen
+    IF NOT current_cities ? city_name THEN
+      -- Oppdater eksisterende liste med ny by
       UPDATE public.user_stats
       SET 
         cities_visited = cities_visited || jsonb_build_array(city_name),
@@ -168,10 +175,11 @@ BEGIN
         'cities_visited', cities_visited
       ) INTO result;
     ELSE
-      -- Byen er allerede besøkt, returner nåværende liste
+      -- Byen er allerede i listen, returner nåværende status
       SELECT jsonb_build_object(
         'user_id', user_id,
-        'cities_visited', cities_visited
+        'cities_visited', cities_visited,
+        'message', 'City already visited'
       ) INTO result
       FROM public.user_stats
       WHERE user_id = user_id_param;

@@ -1,11 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import PropTypes from 'prop-types'
 import MathProblemGenerator from './MathProblemGenerator'
+import { calculateDamageReduction } from '../../utils/skillHelpers'
 
 const BattleArena = ({ character, monster, combatSkillLevel, onCombatEnd, onCancel, onPlayerDamage }) => {
   // Monsterets helse basert på nivå
   const baseMonsterHealth = 50 + (monster?.level * 20)
   const basePlayerDamage = 10 + Math.floor(combatSkillLevel * 1.5)
+  
+  // Beregn total defense fra utstyr
+  const calculateTotalDefense = () => {
+    if (!character || !character.equipment) return 0;
+    
+    let totalDefense = 0;
+    
+    // Gjennomgå alle utstyrte gjenstander
+    Object.values(character.equipment).forEach(item => {
+      if (item && item.defense) {
+        totalDefense += item.defense;
+      }
+    });
+    
+    return totalDefense;
+  };
+  
+  const playerDefense = calculateTotalDefense();
   
   const [monsterHealth, setMonsterHealth] = useState(baseMonsterHealth)
   const [playerHealth, setPlayerHealth] = useState(character?.health || 100)
@@ -20,6 +39,7 @@ const BattleArena = ({ character, monster, combatSkillLevel, onCombatEnd, onCanc
   const [animatePlayer, setAnimatePlayer] = useState(false)
   const [showRetreatConfirm, setShowRetreatConfirm] = useState(false)
   const [totalPlayerDamage, setTotalPlayerDamage] = useState(0)
+  const [totalDamageBlocked, setTotalDamageBlocked] = useState(0)
   
   const answerInputRef = useRef(null)
   const battleLogRef = useRef(null)
@@ -165,29 +185,38 @@ const BattleArena = ({ character, monster, combatSkillLevel, onCombatEnd, onCanc
   
   // Håndterer at spilleren tar skade
   const playerTakeDamage = (damage) => {
-    addToBattleLog('warning', `${monster.name || 'Monsteret'} angriper og gjør ${damage} skade!`)
+    // Bruk forsvarsverdien for å redusere skaden
+    const damageResult = calculateDamageReduction(damage, playerDefense);
+    
+    // Log skaden og forsvarsbonusen
+    if (damageResult.damageBlocked > 0) {
+      addToBattleLog('info', `Forsvaret ditt blokkerte ${damageResult.damageBlocked} skade (${damageResult.defensePercentage}% reduksjon)`);
+    }
+    
+    addToBattleLog('warning', `${monster.name || 'Monsteret'} angriper og gjør ${damageResult.reducedDamage} skade!`);
     
     // Animer spilleren som tar skade
-    setAnimatePlayer(true)
-    setTimeout(() => setAnimatePlayer(false), 500)
+    setAnimatePlayer(true);
+    setTimeout(() => setAnimatePlayer(false), 500);
     
     // Oppdater spillerens helse i kampmodusen
-    const newPlayerHealth = playerHealth - damage
-    setPlayerHealth(Math.max(0, newPlayerHealth))
+    const newPlayerHealth = playerHealth - damageResult.reducedDamage;
+    setPlayerHealth(Math.max(0, newPlayerHealth));
     
     // Meld fra om skaden til parent-komponenten for å påvirke karakterens helse permanent
     if (onPlayerDamage) {
-      onPlayerDamage(damage);
+      onPlayerDamage(damageResult.reducedDamage);
     }
     
-    // Hold styr på total skade tatt
-    setTotalPlayerDamage(prev => prev + damage);
+    // Hold styr på total skade tatt og blokkert
+    setTotalPlayerDamage(prev => prev + damageResult.reducedDamage);
+    setTotalDamageBlocked(prev => prev + damageResult.damageBlocked);
     
     // Sjekk om spilleren er beseiret
     if (newPlayerHealth <= 0) {
-      handleDefeat()
+      handleDefeat();
     }
-  }
+  };
   
   // Legg til en ny melding i kamploggen
   const addToBattleLog = (type, message) => {
@@ -513,9 +542,19 @@ const BattleArena = ({ character, monster, combatSkillLevel, onCombatEnd, onCanc
                 <span className="text-yellow-400">Nivå {monster?.level || 1}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-gray-300">Forsvar:</span>
+                <span className="text-blue-400">{playerDefense} ({playerDefense > 0 ? Math.min(50, Math.round(playerDefense)) : 0}% reduksjon)</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-300">Skade tatt:</span>
                 <span className="text-red-400">{totalPlayerDamage}</span>
               </div>
+              {totalDamageBlocked > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Skade blokkert:</span>
+                  <span className="text-green-400">{totalDamageBlocked}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -100,4 +100,25 @@ export function calculateMaxStats(baseHealth, baseEnergy, skillLevel) {
     maxHealth: baseHealth + (skillLevel * 5),
     maxEnergy: baseEnergy + (skillLevel * 4)
   };
+}
+
+/**
+ * Beregn skadereduksjon basert på forsvarsverdien
+ * @param {number} baseDamage - Utgangsskade før reduksjon
+ * @param {number} defense - Forsvarsverdien
+ * @returns {Object} - Objekt med originalskade, redusert skade og blokkert skade
+ */
+export function calculateDamageReduction(baseDamage, defense) {
+  // Hvert forsvarspoeng gir 1% skadereduksjon, men med avtagende effekt
+  // Maksimalt 50% skadereduksjon ved 100 forsvar
+  const defenseMultiplier = Math.min(0.5, defense / 100);
+  const damageReduction = Math.floor(baseDamage * defenseMultiplier);
+  const finalDamage = Math.max(1, baseDamage - damageReduction); // Minimum 1 i skade
+  
+  return {
+    originalDamage: baseDamage,
+    reducedDamage: finalDamage,
+    damageBlocked: damageReduction,
+    defensePercentage: Math.round(defenseMultiplier * 100) // Prosent skadereduksjon
+  };
 } 

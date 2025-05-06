@@ -1,9 +1,9 @@
 import { supabase } from './supabase';
 
 /**
- * Reisehendelser som kan skje under reise mellom byer
+ * Standard reisehendelser som brukes hvis ingen hendelser finnes i databasen
  */
-export const travelEvents = [
+export const defaultTravelEvents = [
   {
     id: 1,
     title: 'Landeveisrøvere',
@@ -12,7 +12,7 @@ export const travelEvents = [
       { 
         id: 1, 
         text: 'Slåss mot røverne', 
-        skill: 'strength',
+        skill: 'Kamp',
         difficulty: 8, 
         success: 'Du overvinner røverne og finner noen verdisaker.', 
         failure: 'Du kjemper tappert, men blir såret og mister noen mynter.',
@@ -22,7 +22,7 @@ export const travelEvents = [
       { 
         id: 2, 
         text: 'Prøv å snike deg forbi', 
-        skill: 'agility',
+        skill: 'Utforskning',
         difficulty: 7, 
         success: 'Du sniker deg ubemerket forbi røverne.', 
         failure: 'Du blir oppdaget og må flykte, mister en gjenstand på veien.',
@@ -39,7 +39,7 @@ export const travelEvents = [
       { 
         id: 1, 
         text: 'Slå følge for beskyttelse', 
-        skill: 'magic',
+        skill: 'Utholdenhet',
         difficulty: 6, 
         success: 'Karavanen tar deg godt imot, og du lærer mye om handel på reisen.', 
         failure: 'Karavanen er skeptisk og krever betaling for beskyttelse.',
@@ -49,7 +49,7 @@ export const travelEvents = [
       { 
         id: 2, 
         text: 'Forsøk å handle med dem', 
-        skill: 'knowledge',
+        skill: 'Overtalelse',
         difficulty: 7, 
         success: 'Du gjør en god handel og får en god pris på varene.', 
         failure: 'Du blir lurt og betaler overpris for middelmådige varer.',
@@ -66,7 +66,7 @@ export const travelEvents = [
       { 
         id: 1, 
         text: 'La personen følge med deg', 
-        skill: 'magic',
+        skill: 'Kunnskap',
         difficulty: 8, 
         success: 'Den mystiske reisende deler gammel kunnskap og gir deg en verdifull gave før dere skilles.', 
         failure: 'Den mystiske reisende stjeler fra deg mens du sover!',
@@ -76,7 +76,7 @@ export const travelEvents = [
       { 
         id: 2, 
         text: 'Avvis personen høflig', 
-        skill: 'magic',
+        skill: 'Overtalelse',
         difficulty: 5, 
         success: 'Du avviser personen uten å fornærme. Senere møter du personen igjen, som takker for din ærlighet.', 
         failure: 'Personen blir fornærmet og ryktet om din uhøflighet sprer seg til neste by.',
@@ -93,7 +93,7 @@ export const travelEvents = [
       { 
         id: 1, 
         text: 'Skynd deg for å komme fram før uværet', 
-        skill: 'strength',
+        skill: 'Utholdenhet',
         difficulty: 7, 
         success: 'Du presser på og når fram akkurat idet de første regndråpene faller.', 
         failure: 'Du blir fanget i uværet og ankommer utmattet og gjennomvåt.',
@@ -103,7 +103,7 @@ export const travelEvents = [
       { 
         id: 2, 
         text: 'Søk ly og vent til uværet passerer', 
-        skill: 'knowledge',
+        skill: 'Utforskning',
         difficulty: 6, 
         success: 'Du finner en trygg hule hvor du kan vente. Der oppdager du noen gamle mynter!', 
         failure: 'Du finner dårlig beskyttelse og blir likevel våt og kald.',
@@ -120,7 +120,7 @@ export const travelEvents = [
       { 
         id: 1, 
         text: 'Undersøk leiren grundig', 
-        skill: 'agility',
+        skill: 'Utforskning',
         difficulty: 7, 
         success: 'Du finner verdifulle gjenstander som noen har etterlatt!', 
         failure: 'Plutselig dukker eierne opp og anklager deg for tyveri.',
@@ -130,7 +130,7 @@ export const travelEvents = [
       { 
         id: 2, 
         text: 'Gå videre og unngå trøbbel', 
-        skill: 'magic',
+        skill: 'Kunnskap',
         difficulty: 5, 
         success: 'Ditt instinkt redder deg. Like etter hører du skrik fra leiren.', 
         failure: 'Du går glipp av verdifulle ressurser, og angrer på beslutningen.',
@@ -141,12 +141,58 @@ export const travelEvents = [
   }
 ];
 
+// Variabel som vil inneholde aktive hendelser (enten fra databasen eller lokale)
+let activeTravelEvents = [...defaultTravelEvents];
+
+/**
+ * Henter alle reisehendelser fra databasen
+ * @returns {Promise<Array>} Array med hendelser
+ */
+export const fetchTravelEventsFromDB = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('travel_events')
+      .select('*');
+    
+    if (error) {
+      console.error('Feil ved henting av reisehendelser fra database:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Generell feil ved henting av reisehendelser:', error);
+    return null;
+  }
+};
+
+/**
+ * Initialiserer reisehendelser - prøver å hente fra database,
+ * faller tilbake til lokale hendelser hvis det feiler
+ */
+export const initializeTravelEvents = async () => {
+  const dbEvents = await fetchTravelEventsFromDB();
+  
+  if (dbEvents && dbEvents.length > 0) {
+    console.log(`Bruker ${dbEvents.length} reisehendelser fra databasen`);
+    activeTravelEvents = dbEvents;
+  } else {
+    console.log('Bruker standard reisehendelser fra koden');
+    activeTravelEvents = [...defaultTravelEvents];
+  }
+  
+  return activeTravelEvents;
+};
+
+// Initialiser hendelser ved oppstart
+initializeTravelEvents().catch(console.error);
+
 /**
  * Henter en tilfeldig reisehendelse
  */
 export const getRandomTravelEvent = () => {
-  const randomIndex = Math.floor(Math.random() * travelEvents.length);
-  return travelEvents[randomIndex];
+  const randomIndex = Math.floor(Math.random() * activeTravelEvents.length);
+  return activeTravelEvents[randomIndex];
 };
 
 /**
@@ -208,15 +254,22 @@ export const getTravelLog = async (userId) => {
  * @returns {boolean} Om terningkastet var vellykket
  */
 export const rollDice = (baseSkill, difficulty) => {
-  // Simulerer et d20 terningkast
-  const roll = Math.floor(Math.random() * 20) + 1;
+  // Beregn basissjanse: 50%
+  let successChance = 50;
   
-  // Critical success (naturlig 20) eller critical failure (naturlig 1)
-  if (roll === 20) return true;
-  if (roll === 1) return false;
+  // Legg til 2% per ferdighetsnivå
+  successChance += baseSkill * 2;
   
-  // Vanlig terningkast: Hvis roll + skill >= difficulty, er det en suksess
-  return (roll + baseSkill) >= difficulty;
+  // Trekk fra 5% per vanskelighetsgrad over 5
+  const difficultyModifier = difficulty > 5 ? (difficulty - 5) * 5 : 0;
+  successChance -= difficultyModifier;
+  
+  // Sørg for at sjansen alltid er mellom 5% og 95%
+  successChance = Math.min(95, Math.max(5, successChance));
+  
+  // Sjekk om handlingen lykkes
+  const roll = Math.random() * 100;
+  return roll < successChance;
 };
 
 /**

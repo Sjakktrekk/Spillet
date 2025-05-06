@@ -12,7 +12,7 @@ import { getRaceById, getClassById } from '../lib/characterData'
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth()
-  const { character, loading: characterLoading, addCoins, addExperience, calculateExperienceForLevel } = useCharacter()
+  const { character, loading: characterLoading, addCoins, addExperience, calculateExperienceForLevel, calculateTotalDefense } = useCharacter()
   const navigate = useNavigate()
   const { showAchievement } = useAchievements()
   const [showDemo, setShowDemo] = useState(false)
@@ -328,6 +328,17 @@ export default function Home() {
               </div>
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${Math.min(100, ((character?.energy || 0) / (character?.max_energy || 100)) * 100)}%` }}></div>
+              </div>
+              
+              <div className="flex justify-between mb-1 mt-3">
+                <span>Forsvar</span>
+                <span>{character?.defense || calculateTotalDefense(character?.equipment) || 0}</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${Math.min(100, ((character?.defense || 0) / 100) * 100)}%` }}></div>
+              </div>
+              <div className="text-xs text-gray-400 text-right mt-1">
+                Skadereduksjon: {Math.min(50, Math.round(character?.defense || 0))}%
               </div>
             </div>
           </div>

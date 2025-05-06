@@ -8,6 +8,7 @@ import ItemTools from './ItemTools';
 import StudentManagement from './StudentManagement';
 import AchievementAdmin from './AchievementAdmin';
 import TitleAdmin from './TitleAdmin';
+import TravelEventsAdmin from './TravelEventsAdmin';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('quests');
@@ -150,6 +151,16 @@ const AdminDashboard = () => {
                 Elevstyring
               </button>
               <button
+                onClick={() => setActiveTab('travel')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+                  activeTab === 'travel'
+                    ? 'bg-yellow-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                Reisehendelser
+              </button>
+              <button
                 onClick={() => setActiveTab('achievements')}
                 className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
                   activeTab === 'achievements'
@@ -180,6 +191,7 @@ const AdminDashboard = () => {
             {activeTab === 'students' && <StudentManagement />}
             {activeTab === 'achievements' && <AchievementAdmin />}
             {activeTab === 'titles' && <TitleAdmin />}
+            {activeTab === 'travel' && <TravelEventsAdmin />}
           </div>
         </div>
       </div>

@@ -117,21 +117,10 @@ export default function ItemNotification({ item, onClose }) {
           <div className="mt-4 text-lg">
             {Object.entries(item.attributes).map(([attr, value]) => {
               switch(attr) {
-                case 'magic':
-                case 'magi':
-                  return <div key={attr} className="text-blue-400">+{value} Magi</div>;
-                case 'strength':
-                case 'styrke':
-                  return <div key={attr} className="text-red-400">+{value} Styrke</div>;
-                case 'agility':
-                case 'smidighet':
-                  return <div key={attr} className="text-green-400">+{value} Smidighet</div>;
                 case 'utholdenhet':
                   return <div key={attr} className="text-yellow-400">+{value} Utholdenhet</div>;
                 case 'vitalitet':
                   return <div key={attr} className="text-pink-400">+{value} Vitalitet</div>;
-                case 'intelligens':
-                  return <div key={attr} className="text-indigo-400">+{value} Intelligens</div>;
                 default:
                   return null;
               }

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { getTravelLog } from '../lib/travel';
-import { travelEvents } from '../lib/travel';
+import { getTravelLog, defaultTravelEvents } from '../lib/travel';
 import campBackground from '../assets/Camp.jpg';
 
 export default function TravelJournal() {
@@ -158,7 +157,7 @@ export default function TravelJournal() {
                   <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4 mb-4">
                     <h3 className="font-semibold text-gray-200 mb-2">Hendelse under reisen:</h3>
                     {(() => {
-                      const event = travelEvents.find(e => e.id === entry.event_id);
+                      const event = defaultTravelEvents.find(e => e.id === entry.event_id);
                       if (!event) return null;
                       return (
                         <>

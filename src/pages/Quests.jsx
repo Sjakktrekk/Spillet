@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth.jsx'
 import useAchievementTracker from '../hooks/useAchievementTracker'
 import backgroundImage from '../assets/background.jpg'
 import toast from 'react-hot-toast'
+import useCharacter from '../hooks/useCharacter'
+import useSkills from '../hooks/useSkills'
 
 export default function Quests() {
   const { user, loading: authLoading } = useAuth()
@@ -17,6 +19,8 @@ export default function Quests() {
   const [activeFilter, setActiveFilter] = useState('alle')
   const [currentQuest, setCurrentQuest] = useState(null)
   const achievementTracker = useAchievementTracker()
+  const { character, addCoins, addExperience } = useCharacter()
+  const { increaseSkillProgress } = useSkills()
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -234,6 +238,31 @@ export default function Quests() {
       // Spor gullet som vil bli tjent for achievements (når godkjent)
       const goldReward = quest.quest?.reward_gold || 50;
       achievementTracker.earnGold(goldReward);
+
+      // Gi direkte fordeler til spilleren (XP og gull)
+      addExperience(quest.quest?.reward_xp || 100);
+      addCoins(quest.quest?.reward_gold || 50);
+
+      // Håndtere ferdighetsbelønning hvis tilgjengelig
+      if (quest.quest?.reward_skill && 
+          quest.quest.reward_skill.skill_name && 
+          quest.quest.reward_skill.amount) {
+        
+        const skillName = quest.quest.reward_skill.skill_name;
+        const amount = quest.quest.reward_skill.amount;
+        
+        // Øk ferdighetspoeng
+        const result = await increaseSkillProgress(skillName, amount);
+        
+        if (result && result.success) {
+          if (result.leveledUp) {
+            toast.success(`Du fikk +${amount} poeng i ${skillName} og gikk opp til nivå ${result.newLevel}!`);
+          } else {
+            toast.success(`Du fikk +${amount} poeng i ${skillName}!`);
+          }
+        }
+      }
+      
     } catch (error) {
       console.error('Error completing quest:', error);
       toast.error('Kunne ikke fullføre oppdraget');
@@ -307,6 +336,12 @@ export default function Quests() {
                   <span className="text-blue-500 mr-2">✨</span>
                   <span>{currentQuest.reward_xp} XP</span>
                 </div>
+                {currentQuest.reward_skill && currentQuest.reward_skill.skill_name && (
+                  <div className="flex items-center">
+                    <span className="text-green-500 mr-2">🔄</span>
+                    <span>+{currentQuest.reward_skill.amount} {currentQuest.reward_skill.skill_name}-poeng</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -407,6 +442,12 @@ export default function Quests() {
                         <>
                           <span className="text-gray-500 mx-1">|</span>
                           <span className="text-green-400">{questItem.quest.reward_items}</span>
+                        </>
+                      )}
+                      {questItem.quest.reward_skill && questItem.quest.reward_skill.skill_name && (
+                        <>
+                          <span className="text-gray-500 mx-1">|</span>
+                          <span className="text-green-400">+{questItem.quest.reward_skill.amount} {questItem.quest.reward_skill.skill_name}</span>
                         </>
                       )}
                     </div>
@@ -536,6 +577,12 @@ export default function Quests() {
                         <span className="text-yellow-400">{item.quest.reward_gold} gull</span>
                         <span className="text-gray-500 mx-1">|</span>
                         <span className="text-blue-400">{item.quest.reward_xp} XP</span>
+                        {item.quest.reward_skill && item.quest.reward_skill.skill_name && (
+                          <>
+                            <span className="text-gray-500 mx-1">|</span>
+                            <span className="text-green-400">+{item.quest.reward_skill.amount} {item.quest.reward_skill.skill_name}</span>
+                          </>
+                        )}
                       </td>
                       <td className="py-3 text-gray-400">
                         {new Date(item.completed_date || item.quest.completed_at).toLocaleDateString()}

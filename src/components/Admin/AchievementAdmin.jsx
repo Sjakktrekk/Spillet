@@ -7,6 +7,9 @@ const AchievementAdmin = () => {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingAchievement, setEditingAchievement] = useState(null);
+  const [titles, setTitles] = useState([]);
+  const [customReward, setCustomReward] = useState('');
+  const [useCustomReward, setUseCustomReward] = useState(false);
   const [newAchievement, setNewAchievement] = useState({
     id: '',
     name: '',
@@ -15,8 +18,25 @@ const AchievementAdmin = () => {
     difficulty: 'lett',
     icon: '🏆',
     total: 1,
-    reward: 'Tittel: Prestasjonsjeger'
+    reward: '',
+    tracking_type: 'none',
+    stat_key: ''
   });
+
+  const trackingTypes = [
+    { value: 'none', label: 'Ingen automatisk telling' },
+    { value: 'login_count', label: 'Antall innlogginger' },
+    { value: 'quests_completed', label: 'Fullførte oppdrag' },
+    { value: 'messages_count', label: 'Sendte meldinger' },
+    { value: 'items_collected', label: 'Samlede gjenstander' },
+    { value: 'monsters_killed', label: 'Beseirede monstre' },
+    { value: 'gold_earned', label: 'Opptjent gull' },
+    { value: 'cities_visited', label: 'Besøkte byer' },
+    { value: 'distance_traveled', label: 'Tilbakelagt avstand' },
+    { value: 'items_crafted', label: 'Laget gjenstander' },
+    { value: 'resources_gathered', label: 'Samlede råvarer' },
+    { value: 'battles_won', label: 'Vunne kamper' }
+  ];
 
   useEffect(() => {
     const fetchAchievements = async () => {
@@ -37,31 +57,105 @@ const AchievementAdmin = () => {
     };
 
     fetchAchievements();
+    fetchTitles();
   }, []);
+
+  const fetchTitles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('titles')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setTitles(data || []);
+    } catch (error) {
+      console.error('Kunne ikke laste titler:', error);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
+    if (name === 'tracking_type') {
+      const newValue = value === 'none' ? '' : value;
+      setNewAchievement({
+        ...newAchievement,
+        tracking_type: value,
+        stat_key: newValue
+      });
+    } else {
+      setNewAchievement({
+        ...newAchievement,
+        [name]: value
+      });
+    }
+  };
+
+  const handleTitleSelect = (e) => {
+    const titleName = e.target.value;
+    if (titleName === 'custom') {
+      setUseCustomReward(true);
+    } else {
+      setUseCustomReward(false);
+      setNewAchievement({
+        ...newAchievement,
+        reward: titleName ? `Tittel: ${titleName}` : ''
+      });
+    }
+  };
+
+  const handleCustomRewardChange = (e) => {
+    setCustomReward(e.target.value);
     setNewAchievement({
       ...newAchievement,
-      [name]: value
+      reward: e.target.value
     });
   };
 
   const handleEditChange = (e) => {
     const { name, value } = e.target;
-    setEditingAchievement({
-      ...editingAchievement,
-      [name]: value
-    });
+    
+    if (name === 'tracking_type') {
+      const newValue = value === 'none' ? '' : value;
+      setEditingAchievement({
+        ...editingAchievement,
+        tracking_type: value,
+        stat_key: newValue
+      });
+    } else {
+      setEditingAchievement({
+        ...editingAchievement,
+        [name]: value
+      });
+    }
+  };
+
+  const handleEditTitleSelect = (e) => {
+    const titleName = e.target.value;
+    if (titleName === 'custom') {
+      // Behold nåværende verdi men la brukeren redigere manuelt
+    } else {
+      setEditingAchievement({
+        ...editingAchievement,
+        reward: titleName ? `Tittel: ${titleName}` : ''
+      });
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     try {
+      const achievementData = {
+        ...newAchievement
+      };
+      
+      const { tracking_type, ...dataToInsert } = achievementData;
+      
       const { error } = await supabase
         .from('achievements')
-        .insert([newAchievement]);
+        .insert([dataToInsert]);
       
       if (error) throw error;
       
@@ -74,10 +168,13 @@ const AchievementAdmin = () => {
         difficulty: 'lett',
         icon: '🏆',
         total: 1,
-        reward: 'Tittel: Prestasjonsjeger'
+        reward: '',
+        tracking_type: 'none',
+        stat_key: ''
       });
+      setUseCustomReward(false);
+      setCustomReward('');
       
-      // Oppdater listen med prestasjoner
       const { data, error: fetchError } = await supabase
         .from('achievements')
         .select('*')
@@ -95,17 +192,11 @@ const AchievementAdmin = () => {
     e.preventDefault();
     
     try {
+      const { tracking_type, ...dataToUpdate } = editingAchievement;
+      
       const { error } = await supabase
         .from('achievements')
-        .update({
-          name: editingAchievement.name,
-          description: editingAchievement.description,
-          category: editingAchievement.category,
-          difficulty: editingAchievement.difficulty,
-          icon: editingAchievement.icon,
-          total: editingAchievement.total,
-          reward: editingAchievement.reward
-        })
+        .update(dataToUpdate)
         .eq('id', editingAchievement.id);
       
       if (error) throw error;
@@ -113,7 +204,6 @@ const AchievementAdmin = () => {
       toast.success('Prestasjon oppdatert!');
       setShowEditModal(false);
       
-      // Oppdater listen med prestasjoner
       setAchievements(achievements.map(ach => 
         ach.id === editingAchievement.id ? editingAchievement : ach
       ));
@@ -124,7 +214,8 @@ const AchievementAdmin = () => {
   };
 
   const handleEdit = (achievement) => {
-    setEditingAchievement({...achievement});
+    const trackingType = achievement.stat_key ? achievement.stat_key : 'none';
+    setEditingAchievement({...achievement, tracking_type: trackingType});
     setShowEditModal(true);
   };
 
@@ -146,11 +237,29 @@ const AchievementAdmin = () => {
     }
   };
 
+  // Parse reward for å se om det er en tittelbelønning
+  const isTitleReward = (reward) => {
+    if (!reward) return false;
+    return reward.toLowerCase().includes('tittel:');
+  };
+
+  // Hent tittelnavnet fra belønningen
+  const getTitleFromReward = (reward) => {
+    if (!reward) return '';
+    const lowerReward = reward.toLowerCase();
+    if (!lowerReward.includes('tittel:')) return '';
+    
+    const titleStart = lowerReward.indexOf('tittel:') + 7;
+    let titleEnd = lowerReward.indexOf(',', titleStart);
+    if (titleEnd === -1) titleEnd = reward.length;
+    
+    return reward.substring(titleStart, titleEnd).trim();
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-yellow-500">Prestasjonsadministrasjon</h2>
 
-      {/* Skjema for å legge til ny prestasjon */}
       <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
         <h3 className="text-lg font-semibold mb-4 text-yellow-400">Legg til ny prestasjon</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -226,7 +335,7 @@ const AchievementAdmin = () => {
               >
                 <option value="lett">Lett</option>
                 <option value="medium">Medium</option>
-                <option value="hard">Vanskelig</option>
+                <option value="vanskelig">Vanskelig</option>
               </select>
             </div>
 
@@ -245,6 +354,24 @@ const AchievementAdmin = () => {
             </div>
             
             <div>
+              <label className="block text-sm font-medium text-gray-300">Type telling</label>
+              <select
+                name="tracking_type"
+                value={newAchievement.tracking_type}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                  focus:border-yellow-500 focus:ring-yellow-500"
+              >
+                {trackingTypes.map(type => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Velg hvilken statistikk som skal spores automatisk for denne prestasjonen
+              </p>
+            </div>
+            
+            <div>
               <label className="block text-sm font-medium text-gray-300">Mål (antall)</label>
               <input
                 type="number"
@@ -260,16 +387,38 @@ const AchievementAdmin = () => {
             
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-300">Belønning</label>
-              <input
-                type="text"
-                name="reward"
-                value={newAchievement.reward}
-                onChange={handleChange}
-                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                  focus:border-yellow-500 focus:ring-yellow-500"
-                placeholder="F.eks. 'Tittel: Utforsker', '100 gull', etc."
-                required
-              />
+              <div className="flex space-x-2">
+                <select
+                  onChange={handleTitleSelect}
+                  className="mt-1 flex-1 rounded-md bg-gray-700 border-gray-600 text-white
+                    focus:border-yellow-500 focus:ring-yellow-500"
+                >
+                  <option value="">-- Velg belønning --</option>
+                  <optgroup label="Titler">
+                    {titles.map(title => (
+                      <option key={title.name} value={title.name}>
+                        Tittel: {title.name} ({title.rarity})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <option value="custom">Egendefinert belønning</option>
+                </select>
+                
+                {useCustomReward && (
+                  <input
+                    type="text"
+                    value={customReward}
+                    onChange={handleCustomRewardChange}
+                    className="mt-1 flex-1 rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-yellow-500 focus:ring-yellow-500"
+                    placeholder="F.eks. '100 XP, 50 Gull'"
+                    required
+                  />
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Velg en tittel eller angi en egendefinert belønning
+              </p>
             </div>
           </div>
           
@@ -286,7 +435,6 @@ const AchievementAdmin = () => {
         </form>
       </div>
 
-      {/* Eksisterende prestasjoner */}
       {loading ? (
         <div className="flex justify-center py-6">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
@@ -314,6 +462,9 @@ const AchievementAdmin = () => {
                           <span>Vanskelighetsgrad: {achievement.difficulty || 'N/A'}</span>
                           <span>Mål: {achievement.total || 1}</span>
                           <span>Belønning: {achievement.reward || 'Ingen'}</span>
+                          {achievement.stat_key && (
+                            <span>Sporer: {trackingTypes.find(t => t.value === achievement.stat_key)?.label || achievement.stat_key}</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -341,7 +492,6 @@ const AchievementAdmin = () => {
         </div>
       )}
 
-      {/* Redigeringsmodal */}
       {showEditModal && editingAchievement && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 max-w-2xl w-full">
@@ -381,32 +531,6 @@ const AchievementAdmin = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300">Ikon (emoji)</label>
-                  <input
-                    type="text"
-                    name="icon"
-                    value={editingAchievement.icon}
-                    onChange={handleEditChange}
-                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                      focus:border-yellow-500 focus:ring-yellow-500"
-                    required
-                  />
-                </div>
-                
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300">Beskrivelse</label>
-                  <textarea
-                    name="description"
-                    value={editingAchievement.description}
-                    onChange={handleEditChange}
-                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                      focus:border-yellow-500 focus:ring-yellow-500"
-                    rows="3"
-                    required
-                  />
-                </div>
-                
-                <div>
                   <label className="block text-sm font-medium text-gray-300">Kategori</label>
                   <select
                     name="category"
@@ -425,6 +549,19 @@ const AchievementAdmin = () => {
                     <option value="handel">Handel</option>
                   </select>
                 </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300">Beskrivelse</label>
+                  <textarea
+                    name="description"
+                    value={editingAchievement.description}
+                    onChange={handleEditChange}
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-yellow-500 focus:ring-yellow-500"
+                    rows="2"
+                    required
+                  />
+                </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-300">Vanskelighetsgrad</label>
@@ -438,7 +575,35 @@ const AchievementAdmin = () => {
                   >
                     <option value="lett">Lett</option>
                     <option value="medium">Medium</option>
-                    <option value="hard">Vanskelig</option>
+                    <option value="vanskelig">Vanskelig</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Ikon (emoji)</label>
+                  <input
+                    type="text"
+                    name="icon"
+                    value={editingAchievement.icon}
+                    onChange={handleEditChange}
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-yellow-500 focus:ring-yellow-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Type telling</label>
+                  <select
+                    name="tracking_type"
+                    value={editingAchievement.tracking_type}
+                    onChange={handleEditChange}
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-yellow-500 focus:ring-yellow-500"
+                  >
+                    {trackingTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
                   </select>
                 </div>
                 
@@ -456,36 +621,54 @@ const AchievementAdmin = () => {
                   />
                 </div>
                 
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300">Belønning</label>
-                  <input
-                    type="text"
-                    name="reward"
-                    value={editingAchievement.reward}
-                    onChange={handleEditChange}
-                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                      focus:border-yellow-500 focus:ring-yellow-500"
-                    required
-                  />
+                  <div className="flex flex-col md:flex-row md:space-x-2 space-y-2 md:space-y-0">
+                    <select
+                      onChange={handleEditTitleSelect}
+                      className="mt-1 w-full md:w-1/2 rounded-md bg-gray-700 border-gray-600 text-white
+                        focus:border-yellow-500 focus:ring-yellow-500"
+                      value={isTitleReward(editingAchievement.reward) ? getTitleFromReward(editingAchievement.reward) : 'custom'}
+                    >
+                      <optgroup label="Titler">
+                        {titles.map(title => (
+                          <option key={title.name} value={title.name}>
+                            Tittel: {title.name} ({title.rarity})
+                          </option>
+                        ))}
+                      </optgroup>
+                      <option value="custom">Egendefinert belønning</option>
+                    </select>
+                    
+                    <input
+                      type="text"
+                      name="reward"
+                      value={editingAchievement.reward}
+                      onChange={handleEditChange}
+                      className="mt-1 w-full md:w-1/2 rounded-md bg-gray-700 border-gray-600 text-white
+                        focus:border-yellow-500 focus:ring-yellow-500"
+                      placeholder="F.eks. 'Tittel: Utforsker', '100 gull', etc."
+                      required
+                    />
+                  </div>
                 </div>
               </div>
-              
-              <div className="flex justify-end space-x-3 mt-6">
+
+              <div className="flex justify-end mt-6">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md
-                    focus:outline-none transition-colors duration-200"
+                  className="mr-2 px-4 py-2 text-sm font-medium text-gray-500 bg-gray-700 rounded-md border border-gray-600
+                    hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800"
                 >
                   Avbryt
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800
-                    transition-colors duration-200"
+                  className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md
+                    hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800"
                 >
-                  Oppdater
+                  Lagre endringer
                 </button>
               </div>
             </form>

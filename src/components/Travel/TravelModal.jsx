@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import useCharacter from '../../hooks/useCharacter';
-import { getRandomTravelEvent, rollDice, logTravel, calculateTravelCost, updatePlayerLocation } from '../../lib/travel';
 import useAchievementTracker from '../../hooks/useAchievementTracker';
+import useSkills from '../../hooks/useSkills';
+import { getRandomTravelEvent, rollDice, logTravel, calculateTravelCost, updatePlayerLocation } from '../../lib/travel';
+import { supabase } from '../../lib/supabase';
+import { toast } from 'react-hot-toast';
 
 export default function TravelModal({ 
   isOpen, 
@@ -22,6 +25,7 @@ export default function TravelModal({
   } = useCharacter();
   const navigate = useNavigate();
   const achievementTracker = useAchievementTracker();
+  const { skills, getSkillLevel } = useSkills();
   
   const [stage, setStage] = useState('confirm'); // confirm -> traveling -> event -> result -> journal -> complete
   const [event, setEvent] = useState(null);
@@ -48,8 +52,17 @@ export default function TravelModal({
       return;
     }
     
+    // Sjekk om spilleren har nok energi
+    if (character.energy < 20) {
+      alert('Du har ikke nok energi til å reise! Du trenger minst 20 energi.');
+      return;
+    }
+    
     // Trekk reisekostnad
     removeCoins(travelCost);
+    
+    // Reduser energi
+    updateCharacter({ energy: character.energy - 20 });
     
     // Gå til reise-status
     setStage('traveling');
@@ -64,12 +77,12 @@ export default function TravelModal({
   };
   
   // Håndterer valg av handling
-  const handleChoiceSelect = (choice) => {
+  const handleChoiceSelect = async (choice) => {
     setSelectedChoice(choice);
     
     // Simulerer terningkast basert på karakterens ferdigheter
     const skill = choice.skill;
-    const characterSkillValue = character[skill] || 0;
+    const characterSkillValue = getSkillLevel(skill) || 0;
     const isSuccess = rollDice(characterSkillValue, choice.difficulty);
     
     setOutcomeSuccess(isSuccess);
@@ -89,6 +102,106 @@ export default function TravelModal({
         updateCharacter({ 
           health: Math.min(character.health + reward.health, character.max_health) 
         });
+      }
+      // Håndter energi-belønning hvis det er definert
+      if (reward.energy && character.energy !== undefined && character.max_energy !== undefined) {
+        updateCharacter({
+          energy: Math.min(character.energy + reward.energy, character.max_energy)
+        });
+      }
+      
+      // Håndter gjenstand-belønning
+      if (reward.item && reward.item_id) {
+        try {
+          // Sjekk om gjenstanden eksisterer
+          const { data: itemData, error: itemError } = await supabase
+            .from('items')
+            .select('*')
+            .eq('id', reward.item_id)
+            .single();
+            
+          if (itemError) {
+            console.error('Feil ved henting av gjenstand:', itemError);
+          } else if (itemData) {
+            // Legg til gjenstanden i spillerens inventar
+            const { error: addError } = await supabase
+              .from('character_items')
+              .insert({
+                character_id: character.id,
+                item_id: itemData.id,
+                quantity: reward.item_quantity || 1,
+                equipped: false
+              });
+            
+            if (addError) {
+              console.error('Feil ved tildeling av gjenstand:', addError);
+            } else {
+              toast.success(`Du fikk ${reward.item_quantity || 1}x ${itemData.name}!`);
+            }
+          }
+        } catch (error) {
+          console.error('Generell feil ved gjenstandstildeling:', error);
+        }
+      }
+      
+      // Håndter ressurs-belønning
+      if (reward.resource && reward.resource_type) {
+        try {
+          // Sjekk om spilleren har inventar i databasen
+          const { data: inventoryData, error: invError } = await supabase
+            .from('characters')
+            .select('inventory')
+            .eq('id', character.id)
+            .single();
+            
+          if (invError) {
+            console.error('Kunne ikke hente inventar:', invError);
+          } else {
+            // Oppdater inventaret med nye ressurser
+            const inventory = inventoryData.inventory || {};
+            const resources = inventory.resources || {
+              wood: 0,
+              stone: 0,
+              herbs: 0,
+              ore: 0,
+              leather: 0,
+              fabric: 0
+            };
+            
+            const resourceType = reward.resource_type;
+            const quantity = reward.resource_quantity || 1;
+            
+            resources[resourceType] = (resources[resourceType] || 0) + quantity;
+            
+            // Oppdater karakteren i databasen
+            const { error: updateError } = await supabase
+              .from('characters')
+              .update({
+                inventory: {
+                  ...inventory,
+                  resources
+                }
+              })
+              .eq('id', character.id);
+              
+            if (updateError) {
+              console.error('Feil ved oppdatering av ressurser:', updateError);
+            } else {
+              const resourceNames = {
+                wood: 'Tre',
+                stone: 'Stein',
+                herbs: 'Urter',
+                ore: 'Malm',
+                leather: 'Lær',
+                fabric: 'Stoff'
+              };
+              
+              toast.success(`Du fikk ${quantity}x ${resourceNames[resourceType] || resourceType}!`);
+            }
+          }
+        } catch (error) {
+          console.error('Generell feil ved ressurs-tildeling:', error);
+        }
       }
       
       // Achievement
@@ -110,6 +223,12 @@ export default function TravelModal({
       if (penalty.health && character.health !== undefined) {
         updateCharacter({ 
           health: Math.max(1, character.health + penalty.health) 
+        });
+      }
+      // Håndter energi-straff hvis det er definert
+      if (penalty.energy && character.energy !== undefined) {
+        updateCharacter({
+          energy: Math.max(0, character.energy + penalty.energy)
         });
       }
     }
@@ -246,6 +365,10 @@ export default function TravelModal({
                     <span className="text-yellow-400">{travelCost} gull</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-gray-400">Energikostnad:</span>
+                    <span className="text-yellow-400">20 energi</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-400">Beregnet reisetid:</span>
                     <span className="text-gray-200">1 dag</span>
                   </div>
@@ -253,6 +376,12 @@ export default function TravelModal({
                     <span className="text-gray-400">Din gullbeholdning:</span>
                     <span className={character?.coins < travelCost ? 'text-red-400' : 'text-yellow-400'}>
                       {character?.coins || 0} gull
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Din energi:</span>
+                    <span className={character?.energy < 20 ? 'text-red-400' : 'text-yellow-400'}>
+                      {character?.energy || 0} / {character?.max_energy || 100}
                     </span>
                   </div>
                 </div>
@@ -273,14 +402,14 @@ export default function TravelModal({
               </button>
               <button
                 onClick={handleStartTravel}
-                disabled={!character || character.coins < travelCost}
+                disabled={!character || character.coins < travelCost || character.energy < 20}
                 className={`px-4 py-2 rounded-md text-sm font-medium 
-                  ${(!character || character.coins < travelCost) 
+                  ${(!character || character.coins < travelCost || character.energy < 20) 
                     ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
                     : 'bg-yellow-600 hover:bg-yellow-700 text-white'}
                 `}
               >
-                Start reise ({travelCost} gull)
+                Start reise ({travelCost} gull, 20 energi)
               </button>
             </div>
           </>
@@ -310,11 +439,8 @@ export default function TravelModal({
                   <div className="flex justify-between items-center">
                     <span className="font-medium">{choice.text}</span>
                     <span className="text-sm text-gray-400">
-                      Bruker {choice.skill === 'strength' ? 'Styrke' :
-                        choice.skill === 'knowledge' ? 'Kunnskap' :
-                        choice.skill === 'agility' ? 'Smidighet' :
-                        choice.skill === 'magic' ? 'Magi' : 'Ukjent'}
-                      ({character ? character[choice.skill] : 0})
+                      Bruker {choice.skill}
+                      ({getSkillLevel(choice.skill) || 0})
                     </span>
                   </div>
                 </div>
@@ -323,40 +449,85 @@ export default function TravelModal({
           </>
         )}
         
-        {stage === 'result' && (
+        {stage === 'result' && selectedChoice && (
           <>
-            <h2 className="text-2xl font-bold text-yellow-500 mb-4">
-              {outcomeSuccess ? 'Vellykket!' : 'Mislykket!'}
-            </h2>
-            <p className="text-gray-300 mb-6">{outcome}</p>
+            <h2 className="text-2xl font-bold text-yellow-500 mb-4">Resultat</h2>
             
-            <div className="bg-gray-700 p-4 rounded-lg mb-6">
-              <h3 className="font-semibold text-gray-200 mb-2">Resultat:</h3>
-              <div className="space-y-2">
-                {rewards.gold !== 0 && (
-                  <div className="flex justify-between">
-                    <span>Gull:</span>
-                    <span className={rewards.gold > 0 ? 'text-green-400' : 'text-red-400'}>
-                      {rewards.gold > 0 ? `+${rewards.gold}` : rewards.gold}
-                    </span>
+            <div className="mb-6">
+              <div className={`p-4 rounded-lg mb-4 ${outcomeSuccess ? 'bg-green-900 bg-opacity-50 border border-green-700' : 'bg-red-900 bg-opacity-50 border border-red-700'}`}>
+                <h3 className="font-semibold text-lg mb-2">
+                  {outcomeSuccess ? 'Suksess!' : 'Mislykket!'}
+                </h3>
+                <p className="text-gray-300 mb-4">{outcome}</p>
+                
+                <div className="border-t border-gray-600 pt-3">
+                  <div className="font-semibold text-gray-200 mb-2">Resultater:</div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Gull:</span>
+                      <span className={rewards.gold >= 0 ? 'text-yellow-400' : 'text-red-400'}>
+                        {rewards.gold > 0 ? '+' : ''}{rewards.gold}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Erfaring:</span>
+                      <span className={rewards.experience >= 0 ? 'text-blue-400' : 'text-red-400'}>
+                        {rewards.experience > 0 ? '+' : ''}{rewards.experience} XP
+                      </span>
+                    </div>
+                    
+                    {rewards.health !== 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Helse:</span>
+                        <span className={rewards.health > 0 ? 'text-green-400' : 'text-red-400'}>
+                          {rewards.health > 0 ? '+' : ''}{rewards.health} HP
+                        </span>
+                      </div>
+                    )}
+                    
+                    {rewards.energy !== 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Energi:</span>
+                        <span className={rewards.energy > 0 ? 'text-green-400' : 'text-red-400'}>
+                          {rewards.energy > 0 ? '+' : ''}{rewards.energy} Energi
+                        </span>
+                      </div>
+                    )}
+                    
+                    {rewards.item && rewards.item_id && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Gjenstand:</span>
+                        <span className="text-purple-400">
+                          {rewards.item_quantity || 1}x Gjenstand
+                        </span>
+                      </div>
+                    )}
+                    
+                    {rewards.resource && rewards.resource_type && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Ressurs:</span>
+                        <span className="text-green-400">
+                          {rewards.resource_quantity || 1}x 
+                          {' '}
+                          {({
+                            wood: 'Tre',
+                            stone: 'Stein',
+                            herbs: 'Urter',
+                            ore: 'Malm',
+                            leather: 'Lær',
+                            fabric: 'Stoff'
+                          })[rewards.resource_type] || rewards.resource_type}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Energikostnad:</span>
+                      <span className="text-red-400">-20</span>
+                    </div>
                   </div>
-                )}
-                {rewards.experience !== 0 && (
-                  <div className="flex justify-between">
-                    <span>Erfaring:</span>
-                    <span className={rewards.experience > 0 ? 'text-green-400' : 'text-red-400'}>
-                      {rewards.experience > 0 ? `+${rewards.experience}` : rewards.experience}
-                    </span>
-                  </div>
-                )}
-                {rewards.health !== 0 && (
-                  <div className="flex justify-between">
-                    <span>Helse:</span>
-                    <span className={rewards.health > 0 ? 'text-green-400' : 'text-red-400'}>
-                      {rewards.health > 0 ? `+${rewards.health}` : rewards.health}
-                    </span>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
             

@@ -14,12 +14,19 @@ export default function useAchievementTracker() {
     itemsCollected: 0,
     monstersKilled: 0,
     goldEarned: 0,
-    loginCount: 0
+    loginCount: 0,
+    distanceTraveled: 0,
+    itemsCrafted: 0,
+    resourcesGathered: 0,
+    battlesWon: 0
   })
   
   // State for å holde styr på låste titler
   const [unlockedTitles, setUnlockedTitles] = useState([])
   const [activeTitle, setActiveTitle] = useState(null)
+  
+  // State for å holde dynamiske achievements lastet fra databasen
+  const [databaseAchievements, setDatabaseAchievements] = useState([])
   
   // Last inn brukerens stats fra databasen
   useEffect(() => {
@@ -29,59 +36,98 @@ export default function useAchievementTracker() {
     
     const loadStats = async () => {
       try {
-        // Hent brukerens stats fra Supabase
-        const { data: userStats, error: statsError } = await supabase
+        // Hent brukerstatistikk
+        const { data: stats, error: statsError } = await supabase
           .from('user_stats')
           .select('*')
           .eq('user_id', user.id)
           .single()
         
         if (statsError && statsError.code !== 'PGRST116') {
-          console.error('Feil ved henting av statistikk:', statsError)
+          console.error('Feil ved henting av brukerstatistikk:', statsError)
           return
         }
         
-        // Hvis brukeren ikke har stats ennå, opprett en ny rad
-        if (!userStats) {
-          const initialStats = {
-            user_id: user.id,
-            login_count: 1, // Første innlogging
-            quests_completed: 0,
-            messages_count: 0,
-            items_collected: 0,
-            monsters_killed: 0,
-            gold_earned: 0,
-            cities_visited: []
-          }
+        // Oppdater trackedStats med data fra databasen
+        if (stats && isMounted) {
+          setTrackedStats({
+            citiesVisited: stats.cities_visited || [],
+            questsCompleted: stats.quests_completed || 0,
+            messagesCount: stats.messages_count || 0,
+            itemsCollected: stats.items_collected || 0,
+            monstersKilled: stats.monsters_killed || 0,
+            goldEarned: stats.gold_earned || 0,
+            loginCount: stats.login_count || 0,
+            distanceTraveled: stats.distance_traveled || 0,
+            itemsCrafted: stats.items_crafted || 0,
+            resourcesGathered: stats.resources_gathered || 0,
+            battlesWon: stats.battles_won || 0
+          })
+        } else if (isMounted) {
+          // Hvis ingen stats finnes, oppdater login_count via RPC
+          await supabase.rpc('increment_user_stat', {
+            user_id_param: user.id,
+            stat_key: 'login_count',
+            increment_amount: 1
+          })
+        }
+        
+        // Hent brukerens titler
+        const { data: titles, error: titlesError } = await supabase
+          .from('user_titles')
+          .select('title_name, is_active, unlocked_at')
+          .eq('user_id', user.id)
+        
+        if (titlesError) {
+          console.error('Feil ved henting av brukerens titler:', titlesError)
+          return
+        }
+        
+        // Hent full tittelinformasjon
+        if (titles && titles.length > 0 && isMounted) {
+          const titleNames = titles.map(t => t.title_name)
           
-          const { error: insertError } = await supabase
-            .from('user_stats')
-            .insert(initialStats)
+          const { data: titlesInfo, error: titlesInfoError } = await supabase
+            .from('titles')
+            .select('*')
+            .in('name', titleNames)
           
-          if (insertError) {
-            console.error('Feil ved oppretting av brukerstatistikk:', insertError)
+          if (titlesInfoError) {
+            console.error('Feil ved henting av tittler:', titlesInfoError)
             return
           }
           
-          setTrackedStats(initialStats)
+          // Kombiner tittel-info med brukertitteldata
+          const fullTitles = titles.map(userTitle => {
+            const titleInfo = titlesInfo.find(t => t.name === userTitle.title_name)
+            return {
+              ...titleInfo,
+              is_active: userTitle.is_active,
+              unlocked_at: userTitle.unlocked_at
+            }
+          })
           
-          // For nye brukere, sett kun standard tittel
-          const { error: titleError } = await supabase
-            .from('user_titles')
-            .upsert({
-              user_id: user.id,
-              title_name: 'Eventyrsøkeren',
-              unlocked_at: new Date().toISOString(),
-              is_active: true
-            }, {
-              onConflict: 'user_id,title_name'
-            })
-          
-          if (titleError) {
-            console.error('Feil ved oppretting av standard tittel:', titleError)
-            return
+          if (isMounted) {
+            setUnlockedTitles(fullTitles)
+            
+            // Finn aktiv tittel
+            const activeT = fullTitles.find(t => t.is_active)
+            if (activeT) {
+              setActiveTitle(activeT.name)
+            } else if (fullTitles.length > 0) {
+              // Hvis ingen tittel er aktiv, sett den første som aktiv
+              setActiveTitle(fullTitles[0].name)
+              
+              // Oppdater til aktiv i databasen
+              await supabase
+                .from('user_titles')
+                .update({ is_active: true })
+                .eq('user_id', user.id)
+                .eq('title_name', fullTitles[0].name)
+            }
           }
-          
+        } else if (isMounted) {
+          // Hvis brukeren ikke har noen titler, sett standard tittel
           setUnlockedTitles([{
             name: 'Eventyrsøkeren',
             description: 'Standard tittel for nye spillere',
@@ -91,105 +137,29 @@ export default function useAchievementTracker() {
             is_active: true
           }])
           setActiveTitle('Eventyrsøkeren')
-        } else {
-          // Konverter cities_visited fra JSONB til array hvis det er nødvendig
-          const formattedStats = {
-            ...userStats,
-            citiesVisited: Array.isArray(userStats.cities_visited) 
-              ? userStats.cities_visited 
-              : JSON.parse(userStats.cities_visited || '[]'),
-            loginCount: userStats.login_count,
-            questsCompleted: userStats.quests_completed,
-            messagesCount: userStats.messages_count,
-            itemsCollected: userStats.items_collected,
-            monstersKilled: userStats.monsters_killed,
-            goldEarned: userStats.gold_earned
-          }
-          
-          setTrackedStats(formattedStats)
-          
-          // Hent brukerens achievements først
-          const { data: userAchievements, error: achievementsError } = await supabase
-            .from('user_achievements')
-            .select('achievement_id, completed')
-            .eq('user_id', user.id)
-            .eq('completed', true)
-          
-          if (achievementsError) {
-            console.error('Feil ved henting av achievements:', achievementsError)
-            return
-          }
-          
-          const completedAchievementIds = userAchievements?.map(a => a.achievement_id) || []
-          
-          // Finn hvilke titler som er tilgjengelige basert på oppnådde achievements
-          const availableTitles = allAchievements
-            .filter(achievement => 
-              completedAchievementIds.includes(achievement.id) && 
-              achievement.unlockTitle
-            )
-            .map(achievement => achievement.unlockTitle)
-          
-          // Legg til standard tittel hvis den ikke allerede er der
-          if (!availableTitles.includes('Eventyrsøkeren')) {
-            availableTitles.push('Eventyrsøkeren')
-          }
-          
-          // Hent detaljer for tilgjengelige titler
-          const { data: userTitles, error: titlesError } = await supabase
-            .from('user_titles')
-            .select(`
-              title_name,
-              is_active,
-              unlocked_at,
-              titles (
-                name,
-                description,
-                rarity,
-                source
-              )
-            `)
-            .eq('user_id', user.id)
-            .in('title_name', availableTitles)
-          
-          if (titlesError) {
-            console.error('Feil ved henting av titler:', titlesError)
-            return
-          }
-          
-          if (userTitles && userTitles.length > 0) {
-            // Formater titler for React state
-            const formattedTitles = userTitles.map(title => ({
-              name: title.title_name,
-              description: title.titles.description,
-              rarity: title.titles.rarity,
-              source: title.titles.source,
-              unlocked_at: title.unlocked_at,
-              is_active: title.is_active
-            }))
-            
-            setUnlockedTitles(formattedTitles)
-            
-            // Sett aktiv tittel hvis brukeren har valgt en
-            const activeUserTitle = userTitles.find(title => title.is_active)
-            if (activeUserTitle) {
-              setActiveTitle(activeUserTitle.title_name)
-            } else {
-              // Hvis ingen aktiv tittel, sett standard tittel som aktiv
-              setActiveTitle('Eventyrsøkeren')
+        }
+        
+        // Last achievements fra databasen
+        const { data: achievementsData, error: achievementsError } = await supabase
+          .from('achievements')
+          .select('*')
+        
+        if (achievementsError) {
+          console.error('Feil ved henting av achievements:', achievementsError)
+          return
+        }
+        
+        if (achievementsData && isMounted) {
+          // Map database achievements to our format with condition and progress functions
+          const formattedAchievements = achievementsData.map(achievement => {
+            return {
+              ...achievement,
+              condition: (stats) => getProgressValue(stats, achievement.stat_key) >= achievement.total,
+              progress: (stats) => getProgressValue(stats, achievement.stat_key)
             }
-          } else {
-            // Hvis brukeren ikke har noen titler, sett standard tittel
-            setUnlockedTitles([{
-              name: 'Eventyrsøkeren',
-              description: 'Standard tittel for nye spillere',
-              rarity: 'common',
-              source: 'Grunnleggende',
-              unlocked_at: new Date().toISOString(),
-              is_active: true
-            }])
-            setActiveTitle('Eventyrsøkeren')
-          }
+          })
+          
+          setDatabaseAchievements(formattedAchievements)
         }
       } catch (error) {
         console.error('Generell feil ved lastning av brukerdata:', error)
@@ -203,125 +173,37 @@ export default function useAchievementTracker() {
     }
   }, [user])
   
-  // Liste over alle mulige achievements i spillet
-  const allAchievements = [
-    {
-      id: 'login1',
-      name: 'Eventyrets begynnelse',
-      description: 'Logg inn for første gang',
-      category: 'generelt',
-      icon: '🏆',
-      reward: '50 XP',
-      difficulty: 'lett',
-      condition: stats => stats.loginCount >= 1,
-      progress: stats => Math.min(stats.loginCount, 1),
-      total: 1
-    },
-    {
-      id: 'login10',
-      name: 'Dedikert spiller',
-      description: 'Logg inn 10 ganger',
-      category: 'generelt',
-      icon: '🌟',
-      reward: '100 XP, 50 Gull',
-      difficulty: 'medium',
-      condition: stats => stats.loginCount >= 10,
-      progress: stats => Math.min(stats.loginCount, 10),
-      total: 10,
-      unlockTitle: 'Den Dedikerte' // Ny tittel som låses opp
-    },
-    {
-      id: 'cities3',
-      name: 'Reisende',
-      description: 'Besøk 3 forskjellige byer',
-      category: 'utforskning',
-      icon: '🗺️',
-      reward: '100 XP, 50 Gull, Tittel: Reisende',
-      difficulty: 'medium',
-      condition: stats => stats.citiesVisited.length >= 3,
-      progress: stats => stats.citiesVisited.length,
-      total: 3,
-      unlockTitle: 'Reisende'
-    },
-    {
-      id: 'quests5',
-      name: 'Oppdragstaker',
-      description: 'Fullfør 5 oppdrag',
-      category: 'oppdrag',
-      icon: '📜',
-      reward: '150 XP, 100 Gull, Tittel: Oppdragstaker',
-      difficulty: 'medium',
-      condition: stats => stats.questsCompleted >= 5,
-      progress: stats => stats.questsCompleted,
-      total: 5,
-      unlockTitle: 'Oppdragstaker'
-    },
-    {
-      id: 'quests10',
-      name: 'Profesjonell oppdragstaker',
-      description: 'Fullfør 10 oppdrag',
-      category: 'oppdrag',
-      icon: '📜',
-      reward: '250 XP, 150 Gull, Tittel: Oppdragsmester',
-      difficulty: 'hard',
-      condition: stats => stats.questsCompleted >= 10,
-      progress: stats => stats.questsCompleted,
-      total: 10,
-      unlockTitle: 'Oppdragsmester'
-    },
-    {
-      id: 'items5',
-      name: 'Samleren',
-      description: 'Samle 5 sjeldne gjenstander',
-      category: 'inventar',
-      icon: '💎',
-      reward: '200 XP, 1 Episk kiste, Tittel: Samler',
-      difficulty: 'medium',
-      condition: stats => stats.itemsCollected >= 5,
-      progress: stats => stats.itemsCollected,
-      total: 5,
-      unlockTitle: 'Samler'
-    },
-    {
-      id: 'chat50',
-      name: 'Sosial sommerfugl',
-      description: 'Send 50 chat-meldinger',
-      category: 'sosialt',
-      icon: '💬',
-      reward: '100 XP, Tittel: Den Sosiale',
-      difficulty: 'lett',
-      condition: stats => stats.messagesCount >= 50,
-      progress: stats => stats.messagesCount,
-      total: 50,
-      unlockTitle: 'Den Sosiale'
-    },
-    {
-      id: 'gold1000',
-      name: 'Mesterhandler',
-      description: 'Tjene totalt 1000 gull',
-      category: 'handel',
-      icon: '💰',
-      reward: '50 XP, 10% rabatt hos alle handelsmenn, Tittel: Gullsmed',
-      difficulty: 'hard',
-      condition: stats => stats.goldEarned >= 1000,
-      progress: stats => stats.goldEarned,
-      total: 1000,
-      unlockTitle: 'Gullsmed'
-    },
-    {
-      id: 'monsters100',
-      name: 'Monstertemmeren',
-      description: 'Beseire 100 monstre',
-      category: 'kamp',
-      icon: '⚔️',
-      reward: '300 XP, Legendarisk våpen, Tittel: Monsterslakteren',
-      difficulty: 'hard',
-      condition: stats => stats.monstersKilled >= 100,
-      progress: stats => stats.monstersKilled,
-      total: 100,
-      unlockTitle: 'Monsterslakteren'
+  // Hjelpefunksjon for å hente riktig statistikkverdi basert på databasenøkkel
+  const getProgressValue = (stats, statKey) => {
+    if (!statKey) return 0
+    
+    switch (statKey) {
+      case 'login_count':
+        return stats.loginCount || 0
+      case 'quests_completed':
+        return stats.questsCompleted || 0
+      case 'messages_count':
+        return stats.messagesCount || 0
+      case 'items_collected':
+        return stats.itemsCollected || 0
+      case 'monsters_killed':
+        return stats.monstersKilled || 0
+      case 'gold_earned':
+        return stats.goldEarned || 0
+      case 'cities_visited':
+        return (stats.citiesVisited || []).length
+      case 'distance_traveled':
+        return stats.distanceTraveled || 0
+      case 'items_crafted':
+        return stats.itemsCrafted || 0
+      case 'resources_gathered':
+        return stats.resourcesGathered || 0
+      case 'battles_won':
+        return stats.battlesWon || 0
+      default:
+        return 0
     }
-  ]
+  }
   
   // Mapping med titler og deres detaljer
   const titleDetails = {
@@ -374,7 +256,7 @@ export default function useAchievementTracker() {
   
   // Sjekk for nye achievements som bør låses opp
   useEffect(() => {
-    if (!user) return
+    if (!user || databaseAchievements.length === 0) return
     
     let isMounted = true;
     let timeoutId;
@@ -385,7 +267,7 @@ export default function useAchievementTracker() {
       
       try {
         // Oppdater fremgang for alle achievements
-        for (const achievement of allAchievements) {
+        for (const achievement of databaseAchievements) {
           const progress = achievement.progress(trackedStats);
           
           // Oppdater fremgang i databasen
@@ -437,7 +319,8 @@ export default function useAchievementTracker() {
           ?.filter(a => a.completed)
           .map(a => a.achievement_id) || []
         
-        const newUnlocks = allAchievements.filter(achievement => {
+        // Finn achievements som skal låses opp
+        const newUnlocks = databaseAchievements.filter(achievement => {
           // Sjekk om achievement allerede er oppnådd
           if (completedAchievementIds.includes(achievement.id)) return false
           
@@ -478,9 +361,27 @@ export default function useAchievementTracker() {
             continue
           }
           
-          // Lås opp tittel hvis achievement har en
-          if (achievement.unlockTitle) {
-            await unlockTitle(achievement.unlockTitle)
+          // Finn tittelbelønning basert på reward-feltet
+          let titleMatch = null
+          if (achievement.reward) {
+            const rewardText = achievement.reward.toLowerCase()
+            const titlePrefix = 'tittel:'
+            
+            if (rewardText.includes(titlePrefix)) {
+              const titleStart = rewardText.indexOf(titlePrefix) + titlePrefix.length
+              let titleEnd = rewardText.indexOf(',', titleStart)
+              if (titleEnd === -1) titleEnd = rewardText.length
+              
+              const titleName = rewardText.substring(titleStart, titleEnd).trim()
+              if (titleName) {
+                titleMatch = titleName
+              }
+            }
+          }
+          
+          // Lås opp tittel hvis funnet
+          if (titleMatch) {
+            await unlockTitle(titleMatch)
           }
           
           // Vis achievement-melding
@@ -498,195 +399,158 @@ export default function useAchievementTracker() {
       isMounted = false;
       clearTimeout(timeoutId);
     }
-  }, [trackedStats, user, showAchievement])
+  }, [trackedStats, user, showAchievement, databaseAchievements])
   
   // Funksjon for å låse opp en ny tittel
-  const unlockTitle = async (title) => {
-    if (!user || !title) return;
+  const unlockTitle = async (titleName) => {
+    if (!user) return;
     
-    try {
-      // Sjekk først om tittelen allerede er låst opp i unlockedTitles state
-      if (unlockedTitles.some(t => t.name === title)) {
-        return;
-      }
-
-      // Sjekk om tittelen allerede er låst opp i databasen
-      const { data: existingTitle, error: checkError } = await supabase
-        .from('user_titles')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('title_name', title)
+    // Sjekk om brukeren allerede har tittelen
+    const { data: existingTitle, error: checkError } = await supabase
+      .from('user_titles')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('title_name', titleName)
+      .single();
+    
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Feil ved sjekking av eksisterende tittel:', checkError);
+      return;
+    }
+    
+    // Hvis brukeren ikke har tittelen, lås den opp
+    if (!existingTitle) {
+      // Sjekk først at tittelen finnes i tittel-tabellen
+      const { data: titleExists, error: titleCheckError } = await supabase
+        .from('titles')
+        .select('name')
+        .eq('name', titleName)
         .single();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Feil ved sjekk av eksisterende tittel:', checkError);
-        return;
-      }
-
-      // Hvis tittelen allerede finnes, ikke gjør noe
-      if (existingTitle) {
-        return;
-      }
-
-      // Legg til ny tittel med upsert for å håndtere konflikter
-      const { error: insertError } = await supabase
-        .from('user_titles')
-        .upsert({
-          user_id: user.id,
-          title_name: title,
-          unlocked_at: new Date().toISOString(),
-          is_active: false
-        }, {
-          onConflict: 'user_id,title_name'
-        });
-
-      if (insertError) {
-        console.error('Feil ved opplåsing av tittel:', insertError);
-        return;
-      }
-
-      // Oppdater listen over låste opp titler
-      setUnlockedTitles(prev => [...prev, {
-        name: title,
-        description: titleDetails[title]?.description || '',
-        rarity: titleDetails[title]?.rarity || 'common',
-        source: titleDetails[title]?.source || 'Ukjent',
-        unlocked_at: new Date().toISOString(),
-        is_active: false
-      }]);
       
-      // Vis en melding til brukeren
-      toast.success(`Du har låst opp tittelen: ${title}!`);
-    } catch (error) {
-      console.error('Uventet feil ved opplåsing av tittel:', error);
+      if (titleCheckError && titleCheckError.code !== 'PGRST116') {
+        console.error('Feil ved sjekking av tittel:', titleCheckError);
+        return;
+      }
+      
+      // Hvis tittelen ikke finnes, lag den (med standard informasjon)
+      if (!titleExists) {
+        const titleData = titleDetails[titleName] || {
+          description: 'Spesiell tittel',
+          rarity: 'uncommon', 
+          source: 'Achievement'
+        };
+        
+        const { error: createTitleError } = await supabase
+          .from('titles')
+          .insert({
+            name: titleName,
+            description: titleData.description,
+            rarity: titleData.rarity,
+            source: titleData.source
+          });
+        
+        if (createTitleError) {
+          console.error('Feil ved opprettelse av tittel:', createTitleError);
+          return;
+        }
+      }
+      
+      // Lås opp tittelen for brukeren
+      const { error: unlockError } = await supabase
+        .from('user_titles')
+        .insert({
+          user_id: user.id,
+          title_name: titleName,
+          is_active: false, // Ikke sett som aktiv automatisk
+          unlocked_at: new Date().toISOString()
+        });
+      
+      if (unlockError) {
+        console.error('Feil ved opplåsing av tittel:', unlockError);
+        return;
+      }
+      
+      // Oppdater tittel-listen
+      const { data: titleInfo, error: titleInfoError } = await supabase
+        .from('titles')
+        .select('*')
+        .eq('name', titleName)
+        .single();
+      
+      if (titleInfoError) {
+        console.error('Feil ved henting av tittelinfo:', titleInfoError);
+        return;
+      }
+      
+      if (titleInfo) {
+        const newTitle = {
+          ...titleInfo,
+          is_active: false,
+          unlocked_at: new Date().toISOString()
+        };
+        
+        setUnlockedTitles(prev => [...prev, newTitle]);
+      }
     }
   };
   
-  // Funksjon for å sette aktiv tittel
-  const setActiveTitleForUser = async (titleName) => {
-    if (!user) return
+  // Funksjon for å endre aktiv tittel
+  const setTitle = async (titleName) => {
+    if (!user) return;
     
     try {
-      // Sjekk først om brukeren har denne tittelen
-      const { data: hasTitle, error: checkError } = await supabase
-        .from('user_titles')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('title_name', titleName)
-        .single()
-      
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Feil ved sjekking av tittel:', checkError)
-        return
-      }
-      
-      if (!hasTitle) {
-        console.warn('Brukeren forsøker å sette en tittel de ikke har låst opp')
-        return
-      }
-      
-      // Oppdater alle titler til ikke aktive først
-      const { error: updateAllError } = await supabase
+      // Fjern aktiv status fra alle titler
+      const { error: clearError } = await supabase
         .from('user_titles')
         .update({ is_active: false })
-        .eq('user_id', user.id)
+        .eq('user_id', user.id);
       
-      if (updateAllError) {
-        console.error('Feil ved oppdatering av titler:', updateAllError)
-        return
-      }
+      if (clearError) throw clearError;
       
-      // Sett valgt tittel til aktiv
+      // Sett ny aktiv tittel
       const { error: updateError } = await supabase
         .from('user_titles')
         .update({ is_active: true })
         .eq('user_id', user.id)
-        .eq('title_name', titleName)
+        .eq('title_name', titleName);
       
-      if (updateError) {
-        console.error('Feil ved aktivering av tittel:', updateError)
-        return
-      }
+      if (updateError) throw updateError;
       
-      // Oppdater lokal state
-      setActiveTitle(titleName)
+      // Oppdater lokalt
+      setActiveTitle(titleName);
+      setUnlockedTitles(prev => 
+        prev.map(title => ({
+          ...title,
+          is_active: title.name === titleName
+        }))
+      );
+      
+      toast.success(`Tittel byttet til ${titleName}`);
     } catch (error) {
-      console.error('Generell feil ved endring av aktiv tittel:', error)
+      console.error('Feil ved endring av tittel:', error);
+      toast.error('Kunne ikke endre tittel');
     }
-  }
+  };
   
-  // Funksjon for å oppdatere en statistikk
-  const updateStats = async (key, value) => {
-    if (!user) return
-    
-    console.log(`Oppdaterer statistikk ${key} til ${value}`)
-    
-    const dbKey = convertToDatabaseKey(key)
-    
-    // Oppdater lokalt
-    setTrackedStats(prev => {
-      const oldValue = prev[key]
-      console.log(`Lokalt oppdatert ${key} fra ${oldValue} til ${value}`)
-      return { ...prev, [key]: value }
-    })
-    
-    // Oppdater i databasen
-    try {
-      const { error } = await supabase
-        .from('user_stats')
-        .update({ 
-          [dbKey]: value, 
-          last_updated: new Date().toISOString() 
-        })
-        .eq('user_id', user.id)
-      
-      if (error) {
-        console.error(`Feil ved oppdatering av statistikk ${key}:`, error)
-        
-        // Prøv å sette inn en ny rad hvis brukeren ikke finnes
-        try {
-          // Sjekk om brukeren finnes i user_stats
-          const { data: existingUser } = await supabase
-            .from('user_stats')
-            .select('user_id')
-            .eq('user_id', user.id)
-            .single()
-            
-          if (!existingUser) {
-            // Bruker finnes ikke, opprett ny statistikk
-            const initialStats = {
-              user_id: user.id,
-              login_count: key === 'loginCount' ? value : 0,
-              quests_completed: key === 'questsCompleted' ? value : 0,
-              messages_count: key === 'messagesCount' ? value : 0,
-              items_collected: key === 'itemsCollected' ? value : 0,
-              monsters_killed: key === 'monstersKilled' ? value : 0,
-              gold_earned: key === 'goldEarned' ? value : 0,
-              cities_visited: []
-            }
-            
-            const { error: insertError } = await supabase
-              .from('user_stats')
-              .insert(initialStats)
-              
-            if (insertError) {
-              console.error('Feil ved oppretting av statistikk:', insertError)
-            } else {
-              console.log('Opprettet ny statistikk-rad for bruker')
-            }
-          }
-        } catch (checkError) {
-          console.error('Feil ved sjekk av bruker:', checkError)
-        }
-      } else {
-        console.log(`Vellykket oppdatering av ${key} til ${value}`)
-      }
-    } catch (error) {
-      console.error('Generell feil ved oppdatering av statistikk:', error)
+  // Konverter camelCase stat keys til snake_case for databasen
+  const convertToDatabaseKey = (key) => {
+    switch (key) {
+      case 'loginCount': return 'login_count';
+      case 'questsCompleted': return 'quests_completed';
+      case 'messagesCount': return 'messages_count';
+      case 'itemsCollected': return 'items_collected';
+      case 'monstersKilled': return 'monsters_killed';
+      case 'goldEarned': return 'gold_earned';
+      case 'citiesVisited': return 'cities_visited';
+      case 'distanceTraveled': return 'distance_traveled';
+      case 'itemsCrafted': return 'items_crafted';
+      case 'resourcesGathered': return 'resources_gathered';
+      case 'battlesWon': return 'battles_won';
+      default: return key;
     }
-  }
+  };
   
-  // Funksjon for å inkrementere en statistikk
+  // Inkrementere en numerisk statistikk
   const incrementStat = async (key, amount = 1) => {
     if (!user) {
       console.error('Kan ikke inkrementere statistikk: Bruker ikke logget inn')
@@ -754,6 +618,10 @@ export default function useAchievementTracker() {
               monsters_killed: key === 'monstersKilled' ? amount : 0,
               gold_earned: key === 'goldEarned' ? amount : 0,
               cities_visited: [],
+              distance_traveled: key === 'distanceTraveled' ? amount : 0,
+              items_crafted: key === 'itemsCrafted' ? amount : 0,
+              resources_gathered: key === 'resourcesGathered' ? amount : 0,
+              battles_won: key === 'battlesWon' ? amount : 0,
               last_updated: new Date().toISOString()
             }
             
@@ -779,185 +647,81 @@ export default function useAchievementTracker() {
   }
   
   // Funksjon for å legge til et element i et array (f.eks. byer besøkt)
-  const addToArray = async (key, item) => {
-    if (!user) return
+  const addToArrayStat = async (key, value) => {
+    if (!user) return;
     
-    console.log(`Legger til ${item} i ${key}`)
-    
-    if (key !== 'citiesVisited') {
-      console.error(`addToArray støttes bare for 'citiesVisited' for øyeblikket`)
-      return
+    // Unngå duplikater
+    if (key === 'citiesVisited' && trackedStats.citiesVisited.includes(value)) {
+      return;
     }
     
-    const dbKey = convertToDatabaseKey(key)
-    
-    // Oppdater lokalt først
-    setTrackedStats(prev => {
-      const currentArray = prev[key] || []
-      // Sjekk om elementet allerede finnes
-      if (currentArray.includes(item)) {
-        return prev
-      }
-      return { ...prev, [key]: [...currentArray, item] }
-    })
-    
-    // Oppdater i databasen
     try {
-      // Bruk den nye database-funksjonen for å legge til byer
-      const { data, error } = await supabase.rpc('add_city_to_visited', { 
-        user_id_param: user.id,
-        city_name: item
-      })
+      // Oppdater lokalt
+      setTrackedStats(prev => {
+        const updatedArray = [...prev[key], value];
+        return { ...prev, [key]: updatedArray };
+      });
       
-      if (error) {
-        console.error(`Feil ved oppdatering av ${key} med ${item}:`, error)
+      // Oppdater i databasen
+      const dbKey = convertToDatabaseKey(key);
+      
+      if (key === 'citiesVisited') {
+        // Bruk RPC for byer
+        const { error } = await supabase.rpc('add_city_to_visited', {
+          user_id_param: user.id,
+          city_name: value
+        });
         
-        // Fallback-løsning om funksjonen ikke fungerer
-        try {
-          console.log('Prøver fallback-metode...')
-          // Hent nåværende data
-          const { data: currentData, error: fetchError } = await supabase
+        if (error) {
+          console.error(`Feil ved oppdatering av ${key}:`, error);
+          
+          // Fallback: Direkte oppdatering
+          const { data: existingStats } = await supabase
             .from('user_stats')
-            .select(dbKey)
+            .select('cities_visited')
             .eq('user_id', user.id)
-            .single()
+            .single();
+          
+          if (existingStats) {
+            const existingCities = existingStats.cities_visited || [];
             
-          if (fetchError) {
-            if (fetchError.code === 'PGRST116') {
-              // Bruker finnes ikke, opprett ny
-              const newStats = {
-                user_id: user.id,
-                [dbKey]: [item]
-              }
+            if (!existingCities.includes(value)) {
+              const updatedCities = [...existingCities, value];
               
-              const { error: insertError } = await supabase
-                .from('user_stats')
-                .insert(newStats)
-                
-              if (insertError) throw insertError
-            } else {
-              throw fetchError
-            }
-          } else {
-            // Bruker finnes, oppdater array
-            let currentCities = []
-            
-            if (currentData[dbKey]) {
-              // Parse JSON hvis det er en string
-              if (typeof currentData[dbKey] === 'string') {
-                try {
-                  currentCities = JSON.parse(currentData[dbKey])
-                } catch (e) {
-                  console.error('Feil ved parsing av JSON:', e)
-                  currentCities = []
-                }
-              } else {
-                currentCities = currentData[dbKey]
-              }
-            }
-            
-            // Legg til ny by hvis den ikke allerede er der
-            if (!currentCities.includes(item)) {
-              currentCities.push(item)
-              
-              const { error: updateError } = await supabase
+              await supabase
                 .from('user_stats')
                 .update({ 
-                  [dbKey]: currentCities,
-                  last_updated: new Date().toISOString()
+                  cities_visited: updatedCities,
+                  last_updated: new Date().toISOString() 
                 })
-                .eq('user_id', user.id)
-                
-              if (updateError) throw updateError
+                .eq('user_id', user.id);
             }
+          } else {
+            // Opprett ny statistikk
+            await supabase
+              .from('user_stats')
+              .insert({
+                user_id: user.id,
+                cities_visited: [value],
+                last_updated: new Date().toISOString()
+              });
           }
-        } catch (fallbackError) {
-          console.error('Fallback-metode feilet også:', fallbackError)
         }
-      } else {
-        console.log(`Vellykket oppdatering av ${key} med ${item}`, data)
       }
     } catch (error) {
-      console.error('Generell feil ved oppdatering av array:', error)
+      console.error(`Feil ved oppdatering av array ${key}:`, error);
     }
-  }
-  
-  // Funksjon for å registrere besøk til en by
-  const visitCity = (cityName) => {
-    if (!cityName) return
-    console.log(`Registrerer besøk til by: ${cityName}`)
-    addToArray('citiesVisited', cityName)
-  }
-  
-  // Hjelpefunksjoner for spesifikke handlinger
-  
-  const sendMessage = () => {
-    console.log('Inkrementerer meldingsteller')
-    incrementStat('messagesCount', 1)
-  }
-  
-  const completeQuest = () => {
-    incrementStat('questsCompleted', 1)
-  }
-  
-  const collectItem = () => {
-    incrementStat('itemsCollected', 1)
-  }
-  
-  const killMonster = () => {
-    incrementStat('monstersKilled', 1)
-  }
-  
-  const earnGold = (amount) => {
-    incrementStat('goldEarned', amount)
-  }
-  
-  const login = () => {
-    incrementStat('loginCount', 1)
-  }
-  
-  // Hjelpefunksjon for å konvertere camelCase til snake_case for databasen
-  const convertToDatabaseKey = (key) => {
-    switch (key) {
-      case 'loginCount': return 'login_count'
-      case 'questsCompleted': return 'quests_completed'
-      case 'messagesCount': return 'messages_count'
-      case 'itemsCollected': return 'items_collected'
-      case 'monstersKilled': return 'monsters_killed'
-      case 'goldEarned': return 'gold_earned'
-      case 'citiesVisited': return 'cities_visited'
-      default: return key
-    }
-  }
-  
-  // Hent lagrede titler
-  const getUnlockedTitles = () => unlockedTitles
-  
-  // Hent aktiv tittel
-  const getActiveTitle = () => activeTitle
-  
-  // Eksporter funksjon for å sette aktiv tittel
-  const updateActiveTitle = (titleName) => {
-    if (!titleName) return
-    setActiveTitleForUser(titleName)
-  }
+  };
   
   return {
     trackedStats,
-    updateStats,
-    incrementStat,
-    addToArray,
-    visitCity,
+    unlockedTitles,
+    activeTitle,
+    getActiveTitle: () => activeTitle,
+    getUnlockedTitles: () => unlockedTitles,
     unlockTitle,
-    getUnlockedTitles,
-    getActiveTitle,
-    setActiveTitle: updateActiveTitle,
-    // Eksporter hjelpefunksjonene
-    sendMessage,
-    completeQuest,
-    collectItem,
-    killMonster,
-    earnGold,
-    login
+    setTitle,
+    incrementStat,
+    addToArrayStat
   }
 } 
