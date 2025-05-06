@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { supabase } from '../../lib/supabase';
+import { toast } from 'react-hot-toast';
 
 export default function Navbar() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -34,27 +34,27 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     try {
-      // Prøv å logge ut via Supabase direkte
-      const { error } = await supabase.auth.signOut();
+      const { success, error } = await logout();
       
       if (error) {
         console.error('Feil ved utlogging:', error);
-        alert('Det oppstod en feil ved utlogging. Vennligst prøv igjen.');
+        toast.error('Det oppstod en feil ved utlogging. Vennligst prøv igjen.');
         return;
       }
 
-      // Rydd opp i lokal lagring
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // Lukk mobilmenyen hvis den er åpen
-      setMobileMenuOpen(false);
-      
-      // Naviger til innloggingssiden
-      navigate('/', { replace: true });
+      if (success) {
+        // Lukk mobilmenyen hvis den er åpen
+        setMobileMenuOpen(false);
+        
+        // Vis bekreftelse
+        toast.success('Du er nå logget ut');
+        
+        // Naviger til innloggingssiden
+        navigate('/', { replace: true });
+      }
     } catch (error) {
       console.error('Uventet feil ved utlogging:', error);
-      alert('Det oppstod en uventet feil ved utlogging. Vennligst prøv igjen.');
+      toast.error('Det oppstod en uventet feil ved utlogging. Vennligst prøv igjen.');
     }
   };
 

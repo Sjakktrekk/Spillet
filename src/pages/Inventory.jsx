@@ -194,44 +194,160 @@ export default function Inventory() {
     )
   }
   
-  const handleUseItem = (item) => {
+  const handleUseItem = async (item) => {
     if (item.type === 'consumable' || item.type === 'food') {
-      // I en fullverdig app ville vi sendt dette til en API
-      // Her simulerer vi bruken ved å redusere antallet
-      const updatedItems = inventory.items.map(i => {
-        if (i.id === item.id) {
-          if (i.quantity > 1) {
-            return { ...i, quantity: i.quantity - 1 }
-          } else {
-            return null
+      try {
+        // Bruk effekten av forbruksvaren på karakteren
+        if (item.effect === 'restore_health') {
+          // Øk karakterens helse, men ikke over maksimal helse
+          const newHealth = Math.min(character.max_health, character.health + item.effect_value);
+          
+          // Oppdater karakterens helse i databasen
+          const { error: characterError } = await supabase
+            .from('characters')
+            .update({ health: newHealth })
+            .eq('id', character.id);
+            
+          if (characterError) {
+            console.error('Feil ved oppdatering av karakter:', characterError);
+            toast.error('Kunne ikke bruke gjenstanden. Prøv igjen.');
+            return;
           }
+          
+          // Oppdater lokal karakter-tilstand
+          updateCharacter({ health: newHealth });
+          
+          toast.success(`Du brukte ${item.name} og gjenopprettet ${item.effect_value} helse.`);
+        } 
+        else if (item.effect === 'restore_energy') {
+          // Øk karakterens energi, men ikke over maksimal energi
+          const newEnergy = Math.min(character.max_energy, character.energy + item.effect_value);
+          
+          // Oppdater karakterens energi i databasen
+          const { error: characterError } = await supabase
+            .from('characters')
+            .update({ energy: newEnergy })
+            .eq('id', character.id);
+            
+          if (characterError) {
+            console.error('Feil ved oppdatering av karakter:', characterError);
+            toast.error('Kunne ikke bruke gjenstanden. Prøv igjen.');
+            return;
+          }
+          
+          // Oppdater lokal karakter-tilstand
+          updateCharacter({ energy: newEnergy });
+          
+          toast.success(`Du brukte ${item.name} og gjenopprettet ${item.effect_value} energi.`);
         }
-        return i
-      }).filter(Boolean)
-      
-      setInventory({
-        ...inventory,
-        items: updatedItems
-      })
-      
-      alert(`Du brukte ${item.name} og fikk ${item.effect_value} ${item.effect === 'restore_health' ? 'helse' : 'energi'}.`)
+        
+        // Reduser antallet av gjenstanden eller fjern den helt
+        if (item.quantity > 1) {
+          // Oppdater antallet i databasen
+          const { error: updateError } = await supabase
+            .from('character_items')
+            .update({ quantity: item.quantity - 1 })
+            .eq('character_id', character.id)
+            .eq('item_id', item.id);
+            
+          if (updateError) {
+            console.error('Feil ved oppdatering av antall gjenstander:', updateError);
+            toast.error('Kunne ikke oppdatere inventar. Prøv igjen.');
+            return;
+          }
+          
+          // Oppdater lokalt inventory
+          setInventory(prev => ({
+            ...prev,
+            items: prev.items.map(i => 
+              i.id === item.id ? {...i, quantity: i.quantity - 1} : i
+            )
+          }));
+        } else {
+          // Slett gjenstanden fra character_items
+          const { error: deleteError } = await supabase
+            .from('character_items')
+            .delete()
+            .eq('character_id', character.id)
+            .eq('item_id', item.id);
+            
+          if (deleteError) {
+            console.error('Feil ved sletting av gjenstand:', deleteError);
+            toast.error('Kunne ikke fjerne gjenstanden. Prøv igjen.');
+            return;
+          }
+          
+          // Oppdater lokalt inventory
+          setInventory(prev => ({
+            ...prev,
+            items: prev.items.filter(i => i.id !== item.id)
+          }));
+        }
+      } catch (error) {
+        console.error('Uventet feil ved bruk av gjenstand:', error);
+        toast.error('En uventet feil oppstod. Prøv igjen senere.');
+      }
     }
   }
   
   // Funksjon for å håndtere utrustning av gjenstander
   const handleEquipItem = async (item) => {
+    // Legg til feilsøkingslogging for å se hva som skjer
+    console.log('DEBUG handleEquipItem:', {
+      item: item,
+      itemName: item.name,
+      itemType: item.type,
+      itemSubtype: item.subtype,
+      itemSlot: item.slot,
+      selectedSlot: selectedSlot,
+      canEquip: selectedSlot ? canEquipInSlot(item, selectedSlot) : 'ingen valgt slot'
+    });
+    
+    // Hvis gjenstanden allerede er utstyrt, bruk dens nåværende slot
+    // Dette er nyttig når vi kommer fra gjenstandsmodalen
+    let targetSlot = selectedSlot;
+    
+    // Hvis gjenstanden er utstyrt og vi ikke har en valgt slot, bruk gjenstanden sin slot
+    if (item.equipped && item.slot && !targetSlot) {
+      targetSlot = item.slot;
+      console.log('DEBUG: Bruker gjenstanden sin slot:', targetSlot);
+    }
+    
+    // Hvis vi fortsatt ikke har en slot, prøv å finne en passende slot
+    if (!targetSlot) {
+      targetSlot = getEquipmentSlot(item);
+      console.log('DEBUG: Fant passende slot basert på gjenstandstype:', targetSlot);
+      
+      // Hvis vi fortsatt ikke har en slot, kan vi ikke fortsette
+      if (!targetSlot) {
+        toast.error(`Kunne ikke finne en passende slot for ${item.name}.`);
+        return;
+      }
+    }
+    
+    // Sjekk om gjenstanden kan utstyres i valgt slot
+    if (!canEquipInSlot(item, targetSlot)) {
+      toast.error(`${item.name} kan ikke utstyres i ${getSlotName(targetSlot).toLowerCase()}.`);
+      return;
+    }
+    
     // Sjekk om gjenstanden allerede er utstyrt i character.equipment
     const isEquipped = character.equipment && 
-                       character.equipment[selectedSlot] && 
-                       character.equipment[selectedSlot].id === item.id;
+                       character.equipment[targetSlot] && 
+                       character.equipment[targetSlot].id === item.id;
+    
+    console.log('DEBUG: Gjenstanden er allerede utstyrt:', isEquipped);
+    console.log('DEBUG: Character equipment før endring:', character.equipment);
     
     if (isEquipped) {
       // Ta av gjenstanden
-      alert(`Du tok av: ${item.name}`);
+      toast.success(`Du tok av: ${item.name}`);
       
       // Oppdater character state lokalt
       const updatedEquipment = {...character.equipment};
-      delete updatedEquipment[selectedSlot];
+      delete updatedEquipment[targetSlot];
+      
+      console.log('DEBUG: Equipment etter fjerning:', updatedEquipment);
       
       try {
         // Oppdater character_items-tabellen
@@ -262,6 +378,8 @@ export default function Inventory() {
         
         // Oppdater lokalt state
         updateCharacter({ equipment: updatedEquipment });
+        console.log('DEBUG: Character state oppdatert med equipment:', updatedEquipment);
+        
         setInventory(prev => ({
           ...prev,
           items: prev.items.map(i => 
@@ -269,21 +387,33 @@ export default function Inventory() {
           )
         }));
         
+        // Lukk modalen etter handling
+        setShowEquipmentModal(false);
+        
       } catch (error) {
         console.warn('Feil ved oppdatering av utstyr i database:', error);
         localStorage.setItem(`character_equipment_${character.id}`, JSON.stringify(updatedEquipment));
       }
     } else {
       // Utrust gjenstanden
-      alert(`Du utrustet: ${item.name}`);
+      toast.success(`Du utrustet: ${item.name}`);
+      
+      // Lagre referanse til tidligere utstyrt gjenstand
+      const oldEquippedItem = character.equipment && character.equipment[targetSlot] 
+        ? character.equipment[targetSlot] 
+        : null;
+      
+      console.log('DEBUG: Tidligere utstyrt gjenstand:', oldEquippedItem);
       
       // Definer updatedEquipment før try-blokken
       const updatedEquipment = {...character.equipment};
-      updatedEquipment[selectedSlot] = {...item};
+      updatedEquipment[targetSlot] = {...item};
+      
+      console.log('DEBUG: Equipment etter utrustning:', updatedEquipment);
       
       try {
         // Oppdater den gamle gjenstanden hvis den finnes
-        if (character.equipment && character.equipment[selectedSlot]) {
+        if (oldEquippedItem) {
           const { error: oldItemError } = await supabase
             .from('character_items')
             .update({ 
@@ -291,7 +421,7 @@ export default function Inventory() {
               slot: null
             })
             .eq('character_id', character.id)
-            .eq('item_id', character.equipment[selectedSlot].id);
+            .eq('item_id', oldEquippedItem.id);
             
           if (oldItemError) {
             console.warn('Kunne ikke oppdatere gammel gjenstand:', oldItemError);
@@ -304,7 +434,7 @@ export default function Inventory() {
           .from('character_items')
           .update({ 
             equipped: true,
-            slot: selectedSlot
+            slot: targetSlot
           })
           .eq('character_id', character.id)
           .eq('item_id', item.id);
@@ -316,20 +446,30 @@ export default function Inventory() {
         
         // Oppdater character state lokalt
         updateCharacter({ equipment: updatedEquipment });
+        console.log('DEBUG: Character state oppdatert med equipment etter utrustning:', updatedEquipment);
+        
+        // Oppdater inventory state med korrekt equipped status
         setInventory(prev => ({
           ...prev,
           items: prev.items.map(i => {
+            // Ny gjenstand som utstyres
             if (i.id === item.id) {
-              return {...i, equipped: true, slot: selectedSlot};
-            } else if (character.equipment && character.equipment[selectedSlot] && i.id === character.equipment[selectedSlot].id) {
+              return {...i, equipped: true, slot: targetSlot};
+            } 
+            // Gammel gjenstand som tas av
+            else if (oldEquippedItem && i.id === oldEquippedItem.id) {
               return {...i, equipped: false, slot: null};
             }
             return i;
           })
         }));
         
+        // Lukk modalen etter handling
+        setShowEquipmentModal(false);
+        
       } catch (error) {
         console.warn('Feil ved oppdatering av utstyr i database:', error);
+        toast.error('Kunne ikke utstyre gjenstanden');
         localStorage.setItem(`character_equipment_${character.id}`, JSON.stringify(updatedEquipment));
       }
     }
@@ -416,56 +556,257 @@ export default function Inventory() {
   
   // Mapper utstyrstype til slot-navn
   const getEquipmentSlot = (item) => {
-    // Bruk slot-egenskapen direkte hvis den finnes
+    // Hvis gjenstanden allerede har en slot-egenskap, bruk den direkte
     if (item.slot) return item.slot;
     
-    // Fallback til type-basert mapping
+    // Hent navnet i lowercase for enklere sammenligning
+    const name = item.name ? item.name.toLowerCase() : '';
+    
+    // For våpen
     if (item.type === 'weapon') {
       if (item.subtype === 'twoHand') return 'mainHand';
-      if (item.subtype === 'shield') return 'offHand';
+      if (item.subtype === 'shield' || name.includes('skjold')) return 'offHand';
       return 'mainHand';
     }
+    
+    // For rustning
     if (item.type === 'armor') {
-      // For armor, bruk navnet på gjenstanden for å bestemme slot
-      const name = item.name.toLowerCase();
-      if (name.includes('hjelm') || name.includes('hode')) return 'head';
-      if (name.includes('bryst') || name.includes('kjortel')) return 'chest';
-      if (name.includes('bukser') || name.includes('leggings')) return 'pants';
-      if (name.includes('støvler') || name.includes('sko')) return 'boots';
-      if (name.includes('hansker')) return 'gloves';
-      if (name.includes('armringer')) return 'bracers';
-      if (name.includes('skulder')) return 'shoulder';
-      if (name.includes('belte')) return 'belt';
-      if (name.includes('skjold')) return 'offHand';
+      // Spesifikke slottyper basert på navn eller subtype
+      if (name.includes('hjelm') || name.includes('hode') || name.includes('lue') || 
+          name.includes('hatt') || item.subtype === 'head') 
+        return 'head';
+        
+      if (name.includes('bryst') || name.includes('kjortel') || name.includes('jakke') || 
+          name.includes('tunika') || name.includes('brynje') || name.includes('kappe') || 
+          name.includes('rustning') || name.includes('plate') || name.includes('lær') || item.subtype === 'chest') 
+        return 'chest';
+        
+      if (name.includes('bukser') || name.includes('leggings') || 
+          name.includes('benbeskytter') || item.subtype === 'legs') 
+        return 'pants';
+        
+      if (name.includes('støvler') || name.includes('sko') || 
+          name.includes('fot') || item.subtype === 'feet') 
+        return 'boots';
+        
+      if (name.includes('hansker') || name.includes('hånd') || 
+          item.subtype === 'hands') 
+        return 'gloves';
+        
+      if (name.includes('armringer') || name.includes('håndledd') || 
+          item.subtype === 'wrists') 
+        return 'bracers';
+        
+      if (name.includes('skulder') || name.includes('skuldrer') || name.includes('shoulder') || 
+          item.subtype === 'shoulders' || item.subtype === 'shoulder') 
+        return 'shoulder';
+        
+      if (name.includes('belte') || item.subtype === 'waist') 
+        return 'belt';
+      
+      // Fallback til chest hvis ingen spesifikk match
       return 'chest';
     }
+    
+    // For tilbehør
     if (item.type === 'accessory') {
-      if (item.subtype === 'ring') return 'ring';
-      if (item.subtype === 'amulet') return 'amulet';
+      if (item.subtype === 'ring' || name.includes('ring')) return 'ring';
+      if (item.subtype === 'amulet' || name.includes('amulett') || 
+          name.includes('halskjede') || name.includes('anheng')) 
+        return 'amulet';
       return 'misc';
     }
+    
+    // For kjæledyr
     if (item.type === 'pet') return 'pet';
+    
+    // Ingen match
     return null;
+  };
+  
+  // Sjekk om en gjenstand kan utstyres i en bestemt slot
+  const canEquipInSlot = (item, slotType) => {
+    // Hvis gjenstanden har en spesifisert slot og den matcher slotType, tillat det direkte
+    if (item.slot && item.slot === slotType) {
+      return true;
+    }
+    
+    // Hent navnet i lowercase for enklere sammenligning
+    const name = item.name ? item.name.toLowerCase() : '';
+    
+    // Legg til feilsøkingslogging
+    console.log('DEBUG canEquipInSlot:', {
+      item: item,
+      itemName: name,
+      itemType: item.type,
+      itemSubtype: item.subtype,
+      itemSlot: item.slot,
+      slotType: slotType,
+      nameIncludes: {
+        bryst: name.includes('bryst'),
+        kjortel: name.includes('kjortel'),
+        jakke: name.includes('jakke'),
+        tunika: name.includes('tunika'),
+        brynje: name.includes('brynje'),
+        kappe: name.includes('kappe'),
+        rustning: name.includes('rustning'),
+        plate: name.includes('plate'),
+        lær: name.includes('lær')
+      }
+    });
+    
+    // Grunnleggende typekontroll først - våpen kan bare gå i våpenslots, rustning bare i rustningsslots
+    const weaponSlots = ['mainHand', 'offHand'];
+    const armorSlots = ['head', 'chest', 'pants', 'boots', 'gloves', 'bracers', 'shoulder', 'belt'];
+    const accessorySlots = ['ring', 'amulet', 'misc'];
+    
+    // Hvis gjenstanden er et våpen, kan den bare gå i våpenslots
+    if (item.type === 'weapon' && !weaponSlots.includes(slotType)) {
+      console.log(`DEBUG: Våpen kan ikke utstyres i ${slotType}-sloten`);
+      return false;
+    }
+    
+    // Hvis sloten er en våpenslot, kan bare våpen utstyres der
+    if (weaponSlots.includes(slotType) && item.type !== 'weapon') {
+      console.log(`DEBUG: Bare våpen kan utstyres i ${slotType}-sloten`);
+      return false;
+    }
+    
+    // Hvis gjenstanden er rustning, kan den bare gå i rustningsslots
+    if (item.type === 'armor' && !armorSlots.includes(slotType)) {
+      console.log(`DEBUG: Rustning kan ikke utstyres i ${slotType}-sloten`);
+      return false;
+    }
+    
+    // Hvis sloten er en rustningsslot, kan bare rustning utstyres der
+    if (armorSlots.includes(slotType) && item.type !== 'armor') {
+      console.log(`DEBUG: Bare rustning kan utstyres i ${slotType}-sloten`);
+      return false;
+    }
+    
+    // Hvis gjenstanden er tilbehør, kan den bare gå i tilbehørsslots
+    if (item.type === 'accessory' && !accessorySlots.includes(slotType)) {
+      console.log(`DEBUG: Tilbehør kan ikke utstyres i ${slotType}-sloten`);
+      return false;
+    }
+    
+    // Sjekk spesifikke regler for hver slottype
+    switch (slotType) {
+      case 'mainHand':
+        return item.type === 'weapon' && item.subtype !== 'shield';
+      case 'offHand':
+        return (item.type === 'weapon' && item.subtype === 'shield') || 
+               (item.type === 'armor' && name.includes('skjold'));
+      case 'head':
+        return item.type === 'armor' && 
+               (item.subtype === 'head' || 
+                name.includes('hjelm') || 
+                name.includes('hode') ||
+                name.includes('lue') ||
+                name.includes('hatt'));
+      case 'chest':
+        return item.type === 'armor' && 
+               (item.subtype === 'chest' || 
+                name.includes('bryst') || 
+                name.includes('kjortel') ||
+                name.includes('jakke') ||
+                name.includes('tunika') ||
+                name.includes('brynje') ||
+                name.includes('kappe') ||
+                name.includes('rustning') ||
+                name.includes('plate') ||
+                name.includes('lær'));
+      case 'pants':
+        return item.type === 'armor' && 
+               (item.subtype === 'legs' || 
+                name.includes('bukser') || 
+                name.includes('leggings') ||
+                name.includes('benbeskytter'));
+      case 'boots':
+        return item.type === 'armor' && 
+               (item.subtype === 'feet' || 
+                name.includes('støvler') || 
+                name.includes('sko') ||
+                name.includes('fot'));
+      case 'gloves':
+        return item.type === 'armor' && 
+               (item.subtype === 'hands' || 
+                name.includes('hansker') ||
+                name.includes('hånd'));
+      case 'bracers':
+        return item.type === 'armor' && 
+               (item.subtype === 'wrists' || 
+                name.includes('armringer') ||
+                name.includes('håndledd'));
+      case 'shoulder':
+        return item.type === 'armor' && 
+               (item.subtype === 'shoulders' || 
+                item.subtype === 'shoulder' || 
+                name.includes('skulder') ||
+                name.includes('skuldrer') ||
+                name.includes('shoulder'));
+      case 'belt':
+        return item.type === 'armor' && 
+               (item.subtype === 'waist' || 
+                name.includes('belte'));
+      case 'ring':
+        return item.type === 'accessory' && 
+               (item.subtype === 'ring' || 
+                name.includes('ring'));
+      case 'amulet':
+        return item.type === 'accessory' && 
+               (item.subtype === 'amulet' || 
+                name.includes('amulett') || 
+                name.includes('halskjede') ||
+                name.includes('anheng'));
+      case 'misc':
+        return item.type === 'accessory';
+      case 'pet':
+        return item.type === 'pet';
+      default:
+        return false;
+    }
   };
   
   // Funksjon for å håndtere klikk på utstyrsplass
   const handleSlotClick = (slotType) => {
     setSelectedSlot(slotType);
+    
     // Filtrer gjenstander som kan passe i denne slot-typen
     const items = inventory.items.filter(item => {
-      const itemSlot = getEquipmentSlot(item);
-      // For tohåndsvåpen, de kan utrustes i mainHand
-      if (slotType === 'mainHand' && item.type === 'weapon' && item.subtype === 'twoHand') {
-        return true;
+      // Ikke vis gjenstander som allerede er utstyrt i andre slots
+      if (item.equipped && item.slot && item.slot !== slotType) {
+        return false;
       }
-      // For andre våpen, sjekk slot
-      if (item.type === 'weapon') {
-        return itemSlot === slotType;
+      
+      // Sjekk om gjenstanden kan utstyres i denne sloten
+      const canEquip = canEquipInSlot(item, slotType);
+      
+      // Logg gjenstander som ikke kan utstyres for feilsøking
+      if (!canEquip && item.type === 'armor' && !item.equipped) {
+        console.log(`DEBUG: Kan ikke utstyre '${item.name}' i ${getSlotName(slotType)}-sloten.`, {
+          itemType: item.type,
+          itemSubtype: item.subtype,
+          itemName: item.name,
+          targetSlot: slotType
+        });
       }
-      // For rustning og tilbehør, sjekk slot
-      return itemSlot === slotType;
+      
+      return canEquip;
     });
-    setAvailableItems(items);
+    
+    // Sorter slik at gjenstanden som allerede er utstyrt i denne sloten vises først
+    const sortedItems = [...items].sort((a, b) => {
+      // Hvis en av gjenstandene er utstyrt i denne sloten, vis den først
+      if (a.equipped && a.slot === slotType) return -1;
+      if (b.equipped && b.slot === slotType) return 1;
+      
+      // Ellers sorter etter sjeldenhetsgrad
+      const rarityOrder = { legendary: 1, epic: 2, rare: 3, uncommon: 4, common: 5 };
+      return (rarityOrder[a.rarity] || 99) - (rarityOrder[b.rarity] || 99);
+    });
+    
+    setAvailableItems(sortedItems);
     setShowEquipmentModal(true);
   };
   
@@ -539,18 +880,48 @@ export default function Inventory() {
       // Velg en tilfeldig gjenstand
       const randomItem = items[Math.floor(Math.random() * items.length)];
 
-      // Legg til gjenstanden i brukerens inventar
-      const { error: insertError } = await supabase
+      // Sjekk først om karakteren allerede har denne gjenstanden
+      const { data: existingItem, error: checkError } = await supabase
         .from('character_items')
-        .insert([{
-          character_id: character.id,
-          item_id: randomItem.id,
-          quantity: 1,
-          equipped: false
-        }]);
+        .select('*')
+        .eq('character_id', character.id)
+        .eq('item_id', randomItem.id)
+        .single();
 
-      if (insertError) {
-        console.error('Error adding item to inventory:', insertError);
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 betyr "ingen resultater funnet", som er ok i dette tilfellet
+        console.error('Feil ved sjekk av eksisterende gjenstand:', checkError);
+        toast.error('Kunne ikke sjekke inventar');
+        return;
+      }
+
+      let error2;
+      
+      if (existingItem) {
+        // Hvis gjenstanden allerede finnes, øk antallet
+        const { error: updateError } = await supabase
+          .from('character_items')
+          .update({ quantity: existingItem.quantity + 1 })
+          .eq('character_id', character.id)
+          .eq('item_id', randomItem.id);
+          
+        error2 = updateError;
+      } else {
+        // Hvis gjenstanden ikke finnes, legg den til
+        const { error: insertError } = await supabase
+          .from('character_items')
+          .insert([{
+            character_id: character.id,
+            item_id: randomItem.id,
+            quantity: 1,
+            equipped: false
+          }]);
+          
+        error2 = insertError;
+      }
+
+      if (error2) {
+        console.error('Error adding item to inventory:', error2);
         toast.error('Kunne ikke legge til gjenstand i inventaret');
         return;
       }
@@ -565,11 +936,29 @@ export default function Inventory() {
         }
       };
 
-      // Oppdater lokalt inventar
-      setInventory(prev => ({
-        ...prev,
-        items: [...prev.items, transformedItem]
-      }));
+      // Oppdater lokalt inventar - sjekk om gjenstanden allerede finnes
+      setInventory(prev => {
+        const existingItemIndex = prev.items.findIndex(item => item.id === randomItem.id);
+        
+        if (existingItemIndex >= 0) {
+          // Hvis gjenstanden finnes, øk antallet
+          const updatedItems = [...prev.items];
+          updatedItems[existingItemIndex] = {
+            ...updatedItems[existingItemIndex],
+            quantity: (updatedItems[existingItemIndex].quantity || 1) + 1
+          };
+          return {
+            ...prev,
+            items: updatedItems
+          };
+        } else {
+          // Hvis gjenstanden ikke finnes, legg den til
+          return {
+            ...prev,
+            items: [...prev.items, transformedItem]
+          };
+        }
+      });
 
       // Vis notifikasjon
       showItem(transformedItem);
@@ -590,21 +979,45 @@ export default function Inventory() {
   const calculateTotalBonuses = () => {
     const totalBonuses = {
       utholdenhet: 0,
-      helse: 0
+      helse: 0,
+      skade: 0,
+      forsvar: 0
     };
+
+    // Legg til feilsøkingslogg
+    console.log('DEBUG: Starter beregning av totale bonuser');
 
     // Gå gjennom alle utstyrte gjenstander
     inventory.items.filter(item => item.equipped).forEach(item => {
+      console.log(`DEBUG: Sjekker utstyrt gjenstand: ${item.name}`, {
+        itemType: item.type,
+        defense: item.defense,
+        attributes: item.attributes
+      });
+      
       if (item.attributes) {
         Object.entries(item.attributes).forEach(([attr, value]) => {
           const attrLower = attr.toLowerCase();
           if (totalBonuses.hasOwnProperty(attrLower)) {
             totalBonuses[attrLower] += value;
+            console.log(`DEBUG: La til ${value} til ${attrLower} fra attributter`);
           }
         });
       }
+      
+      // Legg til skade og forsvar direkte fra items
+      if (item.damage && typeof item.damage === 'number') {
+        totalBonuses.skade += item.damage;
+        console.log(`DEBUG: La til ${item.damage} til skade fra item.damage`);
+      }
+      
+      if (item.defense && typeof item.defense === 'number') {
+        totalBonuses.forsvar += item.defense;
+        console.log(`DEBUG: La til ${item.defense} til forsvar fra item.defense`);
+      }
     });
 
+    console.log('DEBUG: Ferdige totale bonuser:', totalBonuses);
     return totalBonuses;
   };
 
@@ -612,14 +1025,16 @@ export default function Inventory() {
   const calculateHealthAndEnergyBonuses = (bonuses) => {
     return {
       helse: bonuses.helse * 5,  // Hver helse gir +5 helse
-      energi: bonuses.utholdenhet * 5  // Hver utholdenhet gir +5 energi
+      energi: bonuses.utholdenhet * 5,  // Hver utholdenhet gir +5 energi
+      skade: bonuses.skade,
+      forsvar: bonuses.forsvar
     };
   };
 
   const totalBonuses = calculateTotalBonuses();
-  const healthAndEnergy = calculateHealthAndEnergyBonuses(totalBonuses);
+  const derivedBonuses = calculateHealthAndEnergyBonuses(totalBonuses);
   const hasAnyBonuses = Object.values(totalBonuses).some(value => value > 0);
-  const hasHealthOrEnergyBonus = healthAndEnergy.helse > 0 || healthAndEnergy.energi > 0;
+  const hasDerivedBonuses = Object.values(derivedBonuses).some(value => value > 0);
 
   const handleItemClick = (item) => {
     setSelectedItem(item);
@@ -695,40 +1110,36 @@ export default function Inventory() {
             <h2 className="text-xl font-bold text-yellow-500 mb-4">Utstyrsplasser</h2>
             
             {/* Vis totale bonuser hvis det finnes noen */}
-            {hasAnyBonuses && (
+            {hasDerivedBonuses && (
               <div className="mb-6 bg-gray-700 p-4 rounded-lg border border-gray-600">
-                <h3 className="text-lg font-semibold text-yellow-400 mb-3">Totale Attributtbonuser</h3>
+                <h3 className="text-lg font-semibold text-yellow-400 mb-3">Totale Bonuser</h3>
                 
-                {/* Vis helse- og energibonuser først */}
-                {hasHealthOrEnergyBonus && (
-                  <div className="mb-4 grid grid-cols-2 gap-3">
-                    {healthAndEnergy.helse > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                        <span className="text-gray-300">Maksimal Helse</span>
-                        <span className="text-green-400 font-bold">+{healthAndEnergy.helse}</span>
-                      </div>
-                    )}
-                    {healthAndEnergy.energi > 0 && (
-                      <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                        <span className="text-gray-300">Maksimal Energi</span>
-                        <span className="text-blue-400 font-bold">+{healthAndEnergy.energi}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
+                {/* Vis avledede bonuser (helse, energi, skade, forsvar) */}
                 <div className="grid grid-cols-2 gap-3">
-                  {Object.entries(totalBonuses).map(([attr, value]) => {
-                    if (value > 0) {
-                      return (
-                        <div key={attr} className="flex items-center justify-between p-2 bg-gray-800 rounded">
-                          <span className="text-gray-300 capitalize">{attr}</span>
-                          <span className="text-yellow-400 font-bold">+{value}</span>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
+                  {derivedBonuses.helse > 0 && (
+                    <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                      <span className="text-gray-300">Maksimal Helse</span>
+                      <span className="text-green-400 font-bold">+{derivedBonuses.helse}</span>
+                    </div>
+                  )}
+                  {derivedBonuses.energi > 0 && (
+                    <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                      <span className="text-gray-300">Maksimal Energi</span>
+                      <span className="text-blue-400 font-bold">+{derivedBonuses.energi}</span>
+                    </div>
+                  )}
+                  {derivedBonuses.skade > 0 && (
+                    <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                      <span className="text-gray-300">Skade</span>
+                      <span className="text-red-400 font-bold">+{derivedBonuses.skade}</span>
+                    </div>
+                  )}
+                  {derivedBonuses.forsvar > 0 && (
+                    <div className="flex items-center justify-between p-2 bg-gray-800 rounded">
+                      <span className="text-gray-300">Forsvar</span>
+                      <span className="text-indigo-400 font-bold">+{derivedBonuses.forsvar}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -736,7 +1147,40 @@ export default function Inventory() {
             {/* Utstyrsplasser */}
             <div className="grid grid-cols-2 gap-4">
               {['head', 'chest', 'pants', 'boots', 'gloves', 'bracers', 'shoulder', 'belt', 'mainHand', 'offHand', 'ring', 'amulet', 'misc', 'pet'].map(slot => {
-                const equippedItem = inventory.items.find(item => item.equipped && getEquipmentSlot(item) === slot);
+                // Sjekk først character.equipment for å se om det er noe utstyrt i denne sloten
+                const equippedItemFromCharacter = character.equipment && character.equipment[slot];
+                
+                // Legg til feilsøkingslogg for å se hva som skjer i hver slot
+                if (slot === 'gloves') {
+                  console.log('DEBUG: Sjekker hanskeslot:', {
+                    slot: slot,
+                    equippedItemFromCharacter: equippedItemFromCharacter,
+                    characterEquipment: character.equipment
+                  });
+                }
+                
+                // Deretter finn gjenstanden i inventory basert på ID
+                const equippedItem = equippedItemFromCharacter 
+                  ? inventory.items.find(item => item.id === equippedItemFromCharacter.id)
+                  : null;
+                
+                if (slot === 'gloves' && equippedItemFromCharacter) {
+                  console.log('DEBUG: Hanskedetaljer:', {
+                    equippedItemId: equippedItemFromCharacter.id,
+                    equippedItemName: equippedItemFromCharacter.name,
+                    foundInInventory: !!equippedItem,
+                    equippedItem: equippedItem
+                  });
+                  
+                  // Sjekk alle gjenstander i inventaret
+                  console.log('DEBUG: Alle hansker i inventaret:', 
+                    inventory.items
+                      .filter(item => item.type === 'armor' && 
+                              (item.subtype === 'hands' || 
+                               (item.name && item.name.toLowerCase().includes('hanske'))))
+                  );
+                }
+                
                 return (
                   <div 
                     key={slot}
@@ -1028,51 +1472,64 @@ export default function Inventory() {
             {/* Viser nåværende utstyrte gjenstander */}
             <div className="mb-4">
               <h4 className="text-md font-semibold text-yellow-400 mb-2">Nåværende utstyr</h4>
-              {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot) ? (
+              {character.equipment && character.equipment[selectedSlot] ? (
                 <div className="bg-gray-700 p-3 rounded-lg mb-2 border border-gray-600">
                   <div className="flex items-start">
-                    <div className="w-10 h-10 bg-gray-600 rounded-md flex items-center justify-center text-xl mr-3">
-                      {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).image_url ? (
-                        <img 
-                          src={inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).image_url} 
-                          alt={inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).name}
-                          className="w-full h-full object-contain"
-                        />
+                    {/* Finn gjenstanden i inventory basert på ID */}
+                    {(() => {
+                      const currentItem = inventory.items.find(item => 
+                        item.id === character.equipment[selectedSlot].id
+                      );
+                      
+                      return currentItem ? (
+                        <>
+                          <div className="w-10 h-10 bg-gray-600 rounded-md flex items-center justify-center text-xl mr-3">
+                            {currentItem.image_url ? (
+                              <img 
+                                src={currentItem.image_url} 
+                                alt={currentItem.name}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              currentItem.icon
+                            )}
+                          </div>
+                          <div className="flex-grow">
+                            <div className="flex justify-between">
+                              <h4 className={`font-bold ${getItemRarityColor(currentItem.rarity)}`}>
+                                {currentItem.name}
+                              </h4>
+                              <button 
+                                onClick={() => handleEquipItem(currentItem)}
+                                className="text-xs bg-red-700 hover:bg-red-600 px-2 py-0.5 rounded text-white"
+                              >
+                                Fjern
+                              </button>
+                            </div>
+                            <p className="text-sm text-gray-300 mt-1">{currentItem.description}</p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {currentItem.damage > 0 && (
+                                <span className="bg-gray-600 text-xs text-white px-2 py-0.5 rounded">
+                                  Skade: {currentItem.damage}
+                                </span>
+                              )}
+                              {currentItem.defense > 0 && (
+                                <span className="bg-gray-600 text-xs text-white px-2 py-0.5 rounded">
+                                  Forsvar: {currentItem.defense}
+                                </span>
+                              )}
+                              {currentItem.effect && (
+                                <span className="bg-gray-600 text-xs text-white px-2 py-0.5 rounded">
+                                  Effekt: {currentItem.effect_value} {currentItem.effect}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </>
                       ) : (
-                        inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).icon
-                      )}
-                    </div>
-                    <div className="flex-grow">
-                      <div className="flex justify-between">
-                        <h4 className={`font-bold ${getItemRarityColor(inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).rarity)}`}>
-                          {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).name}
-                        </h4>
-                        <button 
-                          onClick={() => handleEquipItem(inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot))}
-                          className="text-xs bg-red-700 hover:bg-red-600 px-2 py-0.5 rounded text-white"
-                        >
-                          Fjern
-                        </button>
-                      </div>
-                      <p className="text-sm text-gray-300 mt-1">{inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).description}</p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).damage && (
-                          <span className="bg-gray-600 text-xs text-white px-2 py-0.5 rounded">
-                            Skade: {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).damage}
-                          </span>
-                        )}
-                        {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).defense && (
-                          <span className="bg-gray-600 text-xs text-white px-2 py-0.5 rounded">
-                            Forsvar: {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).defense}
-                          </span>
-                        )}
-                        {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).effect && (
-                          <span className="bg-gray-600 text-xs text-white px-2 py-0.5 rounded">
-                            Effekt: {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).effect_value} {inventory.items.find(item => item.equipped && getEquipmentSlot(item) === selectedSlot).effect}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                        <div className="text-gray-400 text-sm italic">Kunne ikke finne informasjon om gjenstanden</div>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : (
@@ -1229,13 +1686,20 @@ export default function Inventory() {
                 {(selectedItem.type === 'weapon' || selectedItem.type === 'armor' || selectedItem.type === 'accessory') && (
                   <button
                     onClick={() => {
-                      handleEquipItem(selectedItem);
-                      setShowItemModal(false);
-                      setSelectedItem(null);
+                      // Sett riktig slot basert på gjenstanden før vi kaller handleEquipItem
+                      const itemSlot = selectedItem.equipped ? selectedItem.slot : getEquipmentSlot(selectedItem);
+                      setSelectedSlot(itemSlot);
+                      
+                      // Legg til en liten forsinkelse for å sikre at selectedSlot er satt
+                      setTimeout(() => {
+                        handleEquipItem(selectedItem);
+                        setShowItemModal(false);
+                        setSelectedItem(null);
+                      }, 10);
                     }}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition-colors"
                   >
-                    Utrust
+                    {selectedItem.equipped ? 'Ta av' : 'Utrust'}
                   </button>
                 )}
                 {(selectedItem.type === 'consumable' || selectedItem.type === 'food') && (

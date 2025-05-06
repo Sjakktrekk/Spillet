@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.jsx'
 import registerBackground from '../assets/register.jpg'
+import { toast } from 'react-hot-toast'
 
 export default function Register() {
   const [email, setEmail] = useState('')
@@ -9,7 +10,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const { signUp } = useAuth()
+  const { signup } = useAuth()
   const navigate = useNavigate()
 
   const handleRegister = async (e) => {
@@ -24,10 +25,16 @@ export default function Register() {
     setIsLoading(true)
 
     try {
-      await signUp(email, password)
-      navigate('/character-creation')
+      const { success, error } = await signup(email, password)
+      
+      if (success) {
+        toast.success('Konto opprettet! Velkommen til Elarion!')
+        navigate('/character-creation')
+      } else {
+        setError(error || 'Kunne ikke opprette konto. Prøv igjen.')
+      }
     } catch (error) {
-      setError('Kunne ikke opprette konto. Prøv igjen.')
+      setError('Feil ved registrering. Vennligst prøv igjen senere.')
       console.error('Registreringsfeil:', error)
     } finally {
       setIsLoading(false)

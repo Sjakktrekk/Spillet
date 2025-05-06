@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.jsx'
 import loginBackground from '../assets/login.jpg'
+import { toast } from 'react-hot-toast'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const { signIn } = useAuth()
+  const { login } = useAuth()
   const navigate = useNavigate()
 
   const handleLogin = async (e) => {
@@ -17,10 +18,16 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      await signIn(email, password)
-      navigate('/home')
+      const { success, error } = await login(email, password)
+      
+      if (success) {
+        toast.success('Du er nå logget inn!')
+        navigate('/home')
+      } else {
+        setError(error || 'Feil e-post eller passord. Prøv igjen.')
+      }
     } catch (error) {
-      setError('Feil e-post eller passord. Prøv igjen.')
+      setError('Feil ved innlogging. Vennligst prøv igjen senere.')
       console.error('Innloggingsfeil:', error)
     } finally {
       setIsLoading(false)

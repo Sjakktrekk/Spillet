@@ -22,6 +22,8 @@ const ItemTools = () => {
     vitality_bonus: 0,
     value: 0,
     image_url: '',
+    effect: '',
+    effect_value: 0,
     attributes: {}
   });
 
@@ -161,30 +163,48 @@ const ItemTools = () => {
 
   const handleCreateItem = async (e) => {
     e.preventDefault();
-    
-    try {
-      let imageUrl = newItem.image_url;
+    setUploading(true);
 
-      // Last opp bilde hvis et er valgt
+    try {
+      let finalImageUrl = newItem.image_url;
+
+      // Last opp bilde hvis det finnes
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+        finalImageUrl = await uploadImage(imageFile);
+        if (!finalImageUrl) {
+          throw new Error('Kunne ikke laste opp bilde');
+        }
       }
 
-      // Opprett gjenstanden
+      // Samle all data for gjenstanden
+      const itemData = {
+        name: newItem.name,
+        description: newItem.description,
+        type: newItem.type,
+        slot: newItem.type === 'consumable' ? null : newItem.slot, // Forbruksvarer trenger ikke slot
+        rarity: newItem.rarity,
+        defense: newItem.defense,
+        damage: newItem.damage,
+        vitality_bonus: newItem.vitality_bonus,
+        value: newItem.value,
+        image_url: finalImageUrl,
+        effect: newItem.type === 'consumable' ? newItem.effect : null,
+        effect_value: newItem.type === 'consumable' ? newItem.effect_value : null
+      };
+
+      // Lagre i databasen
       const { error } = await supabase
         .from('items')
-        .insert([{
-          ...newItem,
-          image_url: imageUrl
-        }]);
+        .insert([itemData]);
 
       if (error) {
-        console.error('Error creating item:', error);
-        toast.error('Kunne ikke opprette gjenstand: ' + error.message);
-        return;
+        throw error;
       }
 
       toast.success('Gjenstand opprettet!');
+      fetchItems(); // Oppdater gjenstander
+      
+      // Tilbakestill skjemaet
       setNewItem({
         name: '',
         description: '',
@@ -195,14 +215,17 @@ const ItemTools = () => {
         damage: 0,
         vitality_bonus: 0,
         value: 0,
-        image_url: ''
+        image_url: '',
+        effect: '',
+        effect_value: 0
       });
       setImageFile(null);
       setImagePreview(null);
-      fetchItems();
-    } catch (err) {
-      console.error('Unexpected error:', err);
-      toast.error('En uventet feil oppstod');
+    } catch (error) {
+      console.error('Error creating item:', error);
+      toast.error('Kunne ikke opprette gjenstand: ' + error.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -243,39 +266,56 @@ const ItemTools = () => {
 
   const handleUpdateItem = async (e) => {
     e.preventDefault();
-    
-    try {
-      let imageUrl = editingItem.image_url;
+    setUploading(true);
 
-      // Last opp nytt bilde hvis et er valgt
+    try {
+      let finalImageUrl = editingItem.image_url;
+
+      // Last opp bilde hvis det finnes nytt
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+        finalImageUrl = await uploadImage(imageFile);
+        if (!finalImageUrl) {
+          throw new Error('Kunne ikke laste opp bilde');
+        }
       }
 
-      // Oppdater gjenstanden
+      // Samle all data for gjenstanden
+      const itemData = {
+        name: editingItem.name,
+        description: editingItem.description,
+        type: editingItem.type,
+        slot: editingItem.type === 'consumable' ? null : editingItem.slot, // Forbruksvarer trenger ikke slot
+        rarity: editingItem.rarity,
+        defense: editingItem.defense,
+        damage: editingItem.damage,
+        vitality_bonus: editingItem.vitality_bonus,
+        value: editingItem.value,
+        image_url: finalImageUrl,
+        effect: editingItem.type === 'consumable' ? editingItem.effect : null,
+        effect_value: editingItem.type === 'consumable' ? editingItem.effect_value : null
+      };
+
+      // Oppdater i databasen
       const { error } = await supabase
         .from('items')
-        .update({
-          ...editingItem,
-          image_url: imageUrl
-        })
+        .update(itemData)
         .eq('id', editingItem.id);
 
       if (error) {
-        console.error('Error updating item:', error);
-        toast.error('Kunne ikke oppdatere gjenstand: ' + error.message);
-        return;
+        throw error;
       }
 
       toast.success('Gjenstand oppdatert!');
+      fetchItems(); // Oppdater gjenstander
       setShowEditModal(false);
       setEditingItem(null);
       setImageFile(null);
       setImagePreview(null);
-      fetchItems();
-    } catch (err) {
-      console.error('Unexpected error:', err);
-      toast.error('En uventet feil oppstod');
+    } catch (error) {
+      console.error('Error updating item:', error);
+      toast.error('Kunne ikke oppdatere gjenstand: ' + error.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -349,28 +389,31 @@ const ItemTools = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300">Slot</label>
-              <select
-                value={newItem.slot}
-                onChange={(e) => setNewItem({ ...newItem, slot: e.target.value })}
-                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                  focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="head">Hode</option>
-                <option value="chest">Bryst</option>
-                <option value="pants">Bukser</option>
-                <option value="belt">Belte</option>
-                <option value="boots">Støvler</option>
-                <option value="gloves">Hansker</option>
-                <option value="bracers">Armringer</option>
-                <option value="shoulder">Skuldre</option>
-                <option value="mainHand">Hovedhånd</option>
-                <option value="offHand">Andre hånd</option>
-                <option value="ring">Ring</option>
-                <option value="amulet">Amulett</option>
-              </select>
-            </div>
+            {/* Vis slot-feltet bare når typen ikke er forbruksvare */}
+            {newItem.type !== 'consumable' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Slot</label>
+                <select
+                  value={newItem.slot}
+                  onChange={(e) => setNewItem({ ...newItem, slot: e.target.value })}
+                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                    focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="head">Hode</option>
+                  <option value="chest">Bryst</option>
+                  <option value="pants">Bukser</option>
+                  <option value="belt">Belte</option>
+                  <option value="boots">Støvler</option>
+                  <option value="gloves">Hansker</option>
+                  <option value="bracers">Armringer</option>
+                  <option value="shoulder">Skuldre</option>
+                  <option value="mainHand">Hovedhånd</option>
+                  <option value="offHand">Andre hånd</option>
+                  <option value="ring">Ring</option>
+                  <option value="amulet">Amulett</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-300">Skade</label>
@@ -416,6 +459,37 @@ const ItemTools = () => {
                 required
               />
             </div>
+
+            {/* Effektfelter for forbruksvarer */}
+            {newItem.type === 'consumable' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Effekttype</label>
+                  <select
+                    value={newItem.effect}
+                    onChange={(e) => setNewItem({ ...newItem, effect: e.target.value })}
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">Velg effekt</option>
+                    <option value="restore_health">Gjenopprett helse</option>
+                    <option value="restore_energy">Gjenopprett energi</option>
+                    <option value="max_health">Øk makshelse</option>
+                    <option value="magic_power">Øk magisk kraft</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Effektverdi</label>
+                  <input
+                    type="number"
+                    value={newItem.effect_value}
+                    onChange={(e) => setNewItem({ ...newItem, effect_value: parseInt(e.target.value) || 0 })}
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-300">Bilde</label>
@@ -540,7 +614,9 @@ const ItemTools = () => {
                   <p className="text-sm text-gray-300 mb-2">{item.description}</p>
                   <div className="space-y-1 text-sm">
                     <p>Type: <span className="text-blue-400">{item.type}</span></p>
-                    <p>Slot: <span className="text-green-400">{slotTypes.find(s => s.value === item.slot)?.label}</span></p>
+                    {item.slot && (
+                      <p>Slot: <span className="text-green-400">{slotTypes.find(s => s.value === item.slot)?.label}</span></p>
+                    )}
                     {item.damage > 0 && (
                       <p>Skade: <span className="text-red-400">{item.damage}</span></p>
                     )}
@@ -549,6 +625,16 @@ const ItemTools = () => {
                     )}
                     {item.vitality_bonus > 0 && (
                       <p>Vitalitet bonus: <span className="text-yellow-400">+{item.vitality_bonus}</span></p>
+                    )}
+                    {item.effect && (
+                      <p>Effekt: 
+                        <span className="text-green-400">
+                          {item.effect === 'restore_health' && ` Gjenoppretter ${item.effect_value} helse`}
+                          {item.effect === 'restore_energy' && ` Gjenoppretter ${item.effect_value} energi`}
+                          {item.effect === 'max_health' && ` +${item.effect_value} makshelse`}
+                          {item.effect === 'magic_power' && ` +${item.effect_value} magisk kraft`}
+                        </span>
+                      </p>
                     )}
                     <p>Verdi: <span className="text-yellow-400">{item.value} coins</span></p>
                   </div>
@@ -631,28 +717,31 @@ const ItemTools = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300">Slot</label>
-                <select
-                  value={editingItem.slot}
-                  onChange={(e) => setEditingItem({ ...editingItem, slot: e.target.value })}
-                  className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
-                    focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="head">Hode</option>
-                  <option value="chest">Bryst</option>
-                  <option value="pants">Bukser</option>
-                  <option value="belt">Belte</option>
-                  <option value="boots">Støvler</option>
-                  <option value="gloves">Hansker</option>
-                  <option value="bracers">Armringer</option>
-                  <option value="shoulder">Skuldre</option>
-                  <option value="mainHand">Hovedhånd</option>
-                  <option value="offHand">Andre hånd</option>
-                  <option value="ring">Ring</option>
-                  <option value="amulet">Amulett</option>
-                </select>
-              </div>
+              {/* Vis slot-feltet bare når typen ikke er forbruksvare */}
+              {editingItem.type !== 'consumable' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Slot</label>
+                  <select
+                    value={editingItem.slot}
+                    onChange={(e) => setEditingItem({ ...editingItem, slot: e.target.value })}
+                    className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                      focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="head">Hode</option>
+                    <option value="chest">Bryst</option>
+                    <option value="pants">Bukser</option>
+                    <option value="belt">Belte</option>
+                    <option value="boots">Støvler</option>
+                    <option value="gloves">Hansker</option>
+                    <option value="bracers">Armringer</option>
+                    <option value="shoulder">Skuldre</option>
+                    <option value="mainHand">Hovedhånd</option>
+                    <option value="offHand">Andre hånd</option>
+                    <option value="ring">Ring</option>
+                    <option value="amulet">Amulett</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-300">Skade</label>
@@ -698,6 +787,37 @@ const ItemTools = () => {
                   required
                 />
               </div>
+
+              {/* Effektfelter for forbruksvarer i redigeringsmodalen */}
+              {editingItem.type === 'consumable' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300">Effekttype</label>
+                    <select
+                      value={editingItem.effect || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, effect: e.target.value })}
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                        focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">Velg effekt</option>
+                      <option value="restore_health">Gjenopprett helse</option>
+                      <option value="restore_energy">Gjenopprett energi</option>
+                      <option value="max_health">Øk makshelse</option>
+                      <option value="magic_power">Øk magisk kraft</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300">Effektverdi</label>
+                    <input
+                      type="number"
+                      value={editingItem.effect_value || 0}
+                      onChange={(e) => setEditingItem({ ...editingItem, effect_value: parseInt(e.target.value) || 0 })}
+                      className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white
+                        focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-300">Bilde</label>

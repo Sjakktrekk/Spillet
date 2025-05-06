@@ -8,7 +8,7 @@ import BattleArena from '../components/Combat/BattleArena'
 import MonsterSelector from '../components/Combat/MonsterSelector'
 import MathProblemGenerator from '../components/Combat/MathProblemGenerator'
 import CombatResults from '../components/Combat/CombatResults'
-import combatBackground from '../assets/background.jpg'
+import combatBackground from '../assets/Arena.jpg'
 import { format, addHours } from 'date-fns'
 import { nb } from 'date-fns/locale'
 
