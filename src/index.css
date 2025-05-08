@@ -13,7 +13,6 @@
     -moz-osx-font-smoothing: grayscale;
     background-color: #1A1A0A;
     color: #F5F5DC;
-    background-image: url('/background-texture.png'), linear-gradient(to bottom, #1A1A0A, #3A2F0B);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -212,4 +211,8 @@
 
 #root {
   height: 100vh;
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%; /* Kompenserer for skaleringen */
+  height: 125%; /* Kompenserer for skaleringen */
 }

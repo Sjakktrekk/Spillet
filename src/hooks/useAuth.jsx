@@ -10,6 +10,19 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
+  // Definer logout-funksjonen utenfor useEffect
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut()
+      setUser(null)
+      localStorage.removeItem('supabase.auth.token')
+      return true
+    } catch (error) {
+      console.error('Utloggingsfeil:', error)
+      throw error
+    }
+  }
+
   useEffect(() => {
     // Sjekk autentiseringsstatus når komponenten lastes
     const checkUser = async () => {
@@ -20,7 +33,7 @@ export function AuthProvider({ children }) {
         console.error('Feil ved henting av bruker:', error)
         // Hvis det er en refresh token feil, logg ut brukeren
         if (error.message && error.message.includes('Refresh Token Not Found')) {
-          await handleLogout()
+          await logout()
           toast.error('Din økt har utløpt. Vennligst logg inn igjen.')
           navigate('/login')
         }
@@ -46,22 +59,6 @@ export function AuthProvider({ children }) {
       }
     )
 
-    // Håndter refresh token feil
-    const handleAuthError = (error) => {
-      if (error.message && error.message.includes('Refresh Token Not Found')) {
-        handleLogout()
-        toast.error('Din økt har utløpt. Vennligst logg inn igjen.')
-        navigate('/login')
-      }
-    }
-
-    // Legg til global error handler for Supabase-feil
-    window.addEventListener('unhandledrejection', (event) => {
-      if (event.reason?.message?.includes('Refresh Token Not Found')) {
-        handleAuthError(event.reason)
-      }
-    })
-
     return () => {
       if (authListener && authListener.subscription) {
         authListener.subscription.unsubscribe()
@@ -69,12 +66,12 @@ export function AuthProvider({ children }) {
     }
   }, [navigate])
 
-  const handleLogin = async (email, password) => {
+  const login = async (email, password) => {
     try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
     
       if (error) throw error
     
@@ -85,20 +82,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut()
-      setUser(null)
-      // Tøm lokal lagring for å sikre at alle tokens er fjernet
-      localStorage.removeItem('supabase.auth.token')
-      return { success: true }
-    } catch (error) {
-      console.error('Utloggingsfeil:', error)
-      return { success: false, error: error.message }
-    }
-  }
-
-  const handleSignup = async (email, password) => {
+  const signup = async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -117,9 +101,9 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     loading,
-    login: handleLogin,
-    logout: handleLogout,
-    signup: handleSignup,
+    login,
+    logout,
+    signup,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

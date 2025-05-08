@@ -9,9 +9,10 @@ import StudentManagement from './StudentManagement';
 import AchievementAdmin from './AchievementAdmin';
 import TitleAdmin from './TitleAdmin';
 import TravelEventsAdmin from './TravelEventsAdmin';
+import ShopAdmin from './ShopAdmin';
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('quests');
+  const [activeTab, setActiveTab] = useState('shop');
   const [cities, setCities] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -111,6 +112,16 @@ const AdminDashboard = () => {
           <div className="border-b border-gray-700">
             <nav className="flex space-x-1 p-2 overflow-x-auto">
               <button
+                onClick={() => setActiveTab('shop')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+                  activeTab === 'shop'
+                    ? 'bg-yellow-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                Butikkadministrasjon
+              </button>
+              <button
                 onClick={() => setActiveTab('quests')}
                 className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
                   activeTab === 'quests'
@@ -185,13 +196,14 @@ const AdminDashboard = () => {
 
           {/* Innhold */}
           <div className="p-6">
+            {activeTab === 'shop' && <ShopAdmin />}
             {activeTab === 'quests' && <QuestAdmin cities={cities} />}
             {activeTab === 'submissions' && <QuestSubmissions />}
             {activeTab === 'items' && <ItemTools />}
             {activeTab === 'students' && <StudentManagement />}
+            {activeTab === 'travel' && <TravelEventsAdmin />}
             {activeTab === 'achievements' && <AchievementAdmin />}
             {activeTab === 'titles' && <TitleAdmin />}
-            {activeTab === 'travel' && <TravelEventsAdmin />}
           </div>
         </div>
       </div>

@@ -157,11 +157,6 @@ function App() {
                     />
                   </Routes>
                 </main>
-                <footer className="bg-gray-800 text-gray-400 py-4 text-center">
-                  <div className="container mx-auto">
-                    <p>© 2024 Vokterne av Elarion. Alle rettigheter forbeholdt.</p>
-                  </div>
-                </footer>
                 
                 {/* Level Up Modal */}
                 <LevelUpModal />

@@ -21,13 +21,19 @@ export async function getClasses() {
 }
 
 export async function createCharacter(characterData) {
-  const { data, error } = await supabase
-    .from('characters')
-    .insert([characterData])
-    .select()
-  
-  if (error) throw error
-  return data[0]
+  try {
+    const { data, error } = await supabase
+      .from('characters')
+      .insert([characterData])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Feil ved opprettelse av karakter:', error);
+    throw error;
+  }
 }
 
 export async function getRaceById(raceId) {
@@ -106,226 +112,6 @@ export async function updateCharacterAvatar(characterId, avatarUrl) {
   
   if (error) throw error
   return data[0]
-}
-
-// Funksjon for å legge til standardutstyr til en nyopprettet karakter
-export async function addStartingEquipment(characterId, classId) {
-  try {
-    // Sjekk først om karakteren eksisterer
-    const { data: character, error: charError } = await supabase
-      .from('characters')
-      .select('*')
-      .eq('id', characterId)
-      .single();
-    
-    if (charError) {
-      console.error('Feil ved henting av karakter:', charError);
-      throw charError;
-    }
-    
-    // Bestem hvilken type utstyr som skal gis basert på klasse
-    let armorType = 'cloth'; // Standard for magikere (class_id 3)
-    
-    if (classId === 2) { // Kriger
-      armorType = 'mail';
-    } else if (classId === 4) { // Tyv
-      armorType = 'leather';
-    } else if (classId === 1) { // Eventyrer
-      armorType = 'leather';
-    }
-    
-    // Opprett standard utstyr basert på armorType
-    const standardEquipment = {
-      head: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Hodeplagg`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 3 : (armorType === 'leather' ? 2 : 1),
-        description: `Et enkelt ${armorType} hodeplagg.`,
-        icon: '👑',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_Head.png`,
-        value: 1
-      },
-      chest: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Brystplate`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 5 : (armorType === 'leather' ? 3 : 2),
-        description: `En enkel ${armorType} brystplate.`,
-        icon: '👕',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_Chest.png`,
-        value: 1
-      },
-      pants: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Bukser`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 4 : (armorType === 'leather' ? 2 : 1),
-        description: `Et par enkle ${armorType} bukser.`,
-        icon: '👖',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_Pants.png`,
-        value: 1
-      },
-      belt: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Belte`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 2 : 1,
-        description: `Et enkelt ${armorType} belte.`,
-        icon: '🧶',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_belt.png`,
-        value: 1
-      },
-      boots: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Støvler`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 3 : 2,
-        description: `Et par enkle ${armorType} støvler.`,
-        icon: '👢',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_Boots.png`,
-        value: 1
-      },
-      gloves: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Hansker`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 2 : 1,
-        description: `Et par enkle ${armorType} hansker.`,
-        icon: '🧤',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_gloves.png`,
-        value: 1
-      },
-      bracers: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Armringer`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'mail' ? 2 : 1,
-        description: `Et par enkle ${armorType} armringer.`,
-        icon: '▮▮',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_bracers.png`,
-        value: 1
-      },
-      shoulder: {
-        name: `${armorType.charAt(0).toUpperCase() + armorType.slice(1)} Skulderbeskyttere`,
-        type: 'armor',
-        rarity: 'common',
-        defense: armorType === 'cloth' ? 3 : 2,
-        description: `Et par enkle ${armorType} skulderbeskyttere.`,
-        icon: '▣',
-        image_url: `/src/assets/Items/Standard/${armorType.charAt(0).toUpperCase() + armorType.slice(1)}1_Shoulder.png`,
-        value: 1
-      }
-    };
-    
-    // Legg til startvåpen basert på klasse
-    let weapon = {};
-    
-    switch (classId) {
-      case 1: // Eventyrer
-        weapon = {
-          name: 'Jaktbue',
-          type: 'weapon',
-          slot: 'mainHand',
-          rarity: 'common',
-          damage: 4,
-          description: 'En enkel jaktbue.',
-          icon: '🏹',
-          image_url: '/src/assets/Items/Standard/Bow_01.png'
-        };
-        break;
-      case 2: // Kriger
-        weapon = {
-          name: 'Krigsøks',
-          type: 'weapon',
-          slot: 'mainHand',
-          rarity: 'common',
-          damage: 6,
-          description: 'En standard krigsøks.',
-          icon: '🪓',
-          image_url: '/src/assets/Items/Standard/Axe_01.png'
-        };
-        break;
-      case 3: // Magiker
-        weapon = {
-          name: 'Tryllestav',
-          type: 'weapon',
-          slot: 'mainHand',
-          rarity: 'common',
-          damage: 3,
-          magicDamage: 5,
-          description: 'En enkel tryllestav.',
-          icon: '🪄',
-          image_url: '/src/assets/Items/Standard/staff_1.png'
-        };
-        break;
-      case 4: // Tyv
-        weapon = {
-          name: 'Dolk',
-          type: 'weapon',
-          slot: 'mainHand',
-          rarity: 'common',
-          damage: 3,
-          critChance: 10,
-          description: 'En skarp dolk.',
-          icon: '🔪',
-          image_url: '/src/assets/Items/Standard/Dagger_01.png'
-        };
-        break;
-      default:
-        weapon = {
-          name: 'Kniv',
-          type: 'weapon',
-          slot: 'mainHand',
-          rarity: 'common',
-          damage: 2,
-          description: 'En enkel kniv.',
-          icon: '🔪',
-          image_url: '/src/assets/Items/Standard/Dagger_01.png'
-        };
-    }
-    
-    standardEquipment.mainHand = weapon;
-    
-    // Implementer logikken for å legge til standardutstyr til karakteren
-    console.log('Standardutstyr:', standardEquipment);
-    
-    // Legg standardutstyret til i databasen
-    for (const [slot, item] of Object.entries(standardEquipment)) {
-      try {
-        const { error } = await supabase
-          .from('items')
-          .insert({
-            character_id: characterId,
-            name: item.name,
-            type: item.type,
-            slot: slot,
-            rarity: item.rarity,
-            defense: item.defense || 0,
-            damage: item.damage || 0,
-            magic_damage: item.magicDamage || 0,
-            crit_chance: item.critChance || 0,
-            description: item.description,
-            icon: item.icon,
-            image_url: item.image_url,
-            equipped: true // Sett utstyret som utrustet med en gang
-          });
-        
-        if (error) {
-          console.error(`Feil ved lagring av ${slot}:`, error);
-        }
-      } catch (itemError) {
-        console.error(`Feil ved lagring av ${slot}:`, itemError);
-      }
-    }
-    
-    console.log('Standardutstyr lagt til i databasen');
-    
-    return standardEquipment;
-  } catch (error) {
-    console.error('Feil ved tilsetting av standardutstyr:', error);
-    throw error;
-  }
 }
 
 // Funksjon for å slette en karakter

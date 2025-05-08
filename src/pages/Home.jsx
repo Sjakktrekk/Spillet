@@ -2,7 +2,6 @@ import { useAuth } from '../hooks/useAuth.jsx'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import MapView from '../components/Map/MapView'
-import ChatBox from '../components/Chat/ChatBox'
 import { useAchievements } from '../components/Achievements/AchievementContext'
 import { supabase } from '../lib/supabase'
 import { updatePlayerLocation } from '../lib/travel'
@@ -267,9 +266,9 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen bg-gray-900 text-white grid grid-cols-[250px_1fr] grid-rows-[1fr_200px]">
+    <div className="h-screen bg-gray-900 text-white grid grid-cols-[250px_1fr]">
       {/* Venstre NAV-kolonne */}
-      <div className="bg-gray-800 border-r border-gray-700 row-span-2 p-4">
+      <div className="bg-gray-800 border-r border-gray-700 p-4">
         <div className="mb-6">
           <div className="bg-gray-900 rounded-lg p-3 border border-gray-700">
             {/* Navn og tittel */}
@@ -457,11 +456,6 @@ export default function Home() {
       {/* Kart-visning (hovedinnhold) */}
       <div className="relative">
         <MapView />
-      </div>
-      
-      {/* Chat-boks under kartet */}
-      <div className="bg-gray-800 border-t border-gray-700 p-4">
-        <ChatBox />
       </div>
 
       {/* Modal for å vise avatar i full størrelse */}

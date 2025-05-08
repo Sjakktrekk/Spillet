@@ -20,6 +20,8 @@ export default function City() {
   const [activeTab, setActiveTab] = useState('oversikt')
   const [playerLocation, setPlayerLocation] = useState(null)
   const [availableQuests, setAvailableQuests] = useState([])
+  const [showServicesModal, setShowServicesModal] = useState(false)
+  const [showQuestsModal, setShowQuestsModal] = useState(false)
   const achievementTracker = useAchievementTracker()
   const cityLoadAttemptedRef = useRef(false);
   const userAnnouncedRef = useRef(false);
@@ -462,7 +464,7 @@ Orkene i Skyggeborg er stolte og sterke. De var en gang under Skyggens kontroll,
       }}
     >
       <div className="max-w-7xl mx-auto">
-        {/* By header med informasjon og tilbake-knapp */}
+        {/* By header med informasjon og knapper */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 bg-gray-800 bg-opacity-90 rounded-lg p-6 border border-gray-700 shadow-lg">
           <div>
             <div className="flex items-center mb-4 md:mb-0">
@@ -478,18 +480,34 @@ Orkene i Skyggeborg er stolte og sterke. De var en gang under Skyggens kontroll,
             </div>
           </div>
 
-          <button 
-            onClick={handleTravelBack}
-            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors flex items-center"
-          >
-            <span className="mr-2">🗺️</span>
-            Tilbake til verdenskartet
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={() => setShowServicesModal(true)}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors flex items-center"
+            >
+              <span className="mr-2">🏪</span>
+              Tjenester
+            </button>
+            <button 
+              onClick={() => setShowQuestsModal(true)}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors flex items-center"
+            >
+              <span className="mr-2">📜</span>
+              Oppdrag
+            </button>
+            <button 
+              onClick={handleTravelBack}
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors flex items-center"
+            >
+              <span className="mr-2">🗺️</span>
+              Tilbake til verdenskartet
+            </button>
+          </div>
         </div>
         
         {/* Ny struktur med to hovedkolonner */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Venstre kolonne - by informasjon og tabs */}
+          {/* Venstre kolonne - by informasjon */}
           <div className="lg:col-span-2 space-y-6">
             {/* Beskrivelse av byen */}
             <div className="bg-gray-800 bg-opacity-90 rounded-lg p-6 border border-gray-700 shadow-lg">
@@ -507,157 +525,9 @@ Orkene i Skyggeborg er stolte og sterke. De var en gang under Skyggens kontroll,
                 })}
               </div>
             </div>
-            
-            {/* Tabs */}
-            <div className="bg-gray-800 bg-opacity-90 rounded-lg border border-gray-700 shadow-lg overflow-hidden">
-              <div className="flex border-b border-gray-700 bg-gray-800 bg-opacity-80 px-2 pt-2">
-                <button 
-                  onClick={() => setActiveTab('oversikt')}
-                  className={`${
-                    activeTab === 'oversikt' 
-                      ? 'border-yellow-500 text-yellow-500' 
-                      : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-400'
-                  } flex items-center px-4 py-2 border-b-2 font-medium text-sm`}
-                >
-                  <span className="mr-2">🏙️</span>
-                  Oversikt
-                </button>
-                <button 
-                  onClick={() => setActiveTab('tjenester')}
-                  className={`${
-                    activeTab === 'tjenester' 
-                      ? 'border-yellow-500 text-yellow-500' 
-                      : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-400'
-                  } flex items-center px-4 py-2 border-b-2 font-medium text-sm`}
-                >
-                  <span className="mr-2">🏪</span>
-                  Tjenester
-                </button>
-                <button 
-                  onClick={() => setActiveTab('oppdrag')}
-                  className={`${
-                    activeTab === 'oppdrag' 
-                      ? 'border-yellow-500 text-yellow-500' 
-                      : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-400'
-                  } flex items-center px-4 py-2 border-b-2 font-medium text-sm`}
-                >
-                  <span className="mr-2">📜</span>
-                  Oppdrag
-                </button>
-              </div>
-              
-              {/* Tab innhold */}
-              <div className="p-6">
-                {activeTab === 'oversikt' && (
-                  <div className="space-y-6">
-                    <div>
-                      <h2 className="text-xl font-bold text-yellow-500 mb-4">Byens historie</h2>
-                      <p className="text-gray-300 mb-4">
-                        {city.history || `${city.name} har en rik historie som strekker seg tilbake mange hundre år. Byen ble grunnlagt av handelsmenn som så verdien i dette strategiske området.`}
-                      </p>
-                      <p className="text-gray-300">
-                        I dag er byen kjent for sin livlige markedsplass og dyktige håndverkere.
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <h2 className="text-xl font-bold text-yellow-500 mb-4">Aktiviteter</h2>
-                      
-                      <div className="space-y-4">
-                        <div className="flex items-start">
-                          <div className="bg-gray-700 p-2 rounded-lg mr-3">🏪</div>
-                          <div>
-                            <h3 className="font-semibold">Handel</h3>
-                            <p className="text-sm text-gray-300">Utforsk markedsplassen og kjøp eller selg varer med lokale handelsmenn.</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-start">
-                          <div className="bg-gray-700 p-2 rounded-lg mr-3">⚔️</div>
-                          <div>
-                            <h3 className="font-semibold">Trening</h3>
-                            <p className="text-sm text-gray-300">Tren dine ferdigheter med lokale mestere.</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-start">
-                          <div className="bg-gray-700 p-2 rounded-lg mr-3">📜</div>
-                          <div>
-                            <h3 className="font-semibold">Oppdrag</h3>
-                            <p className="text-sm text-gray-300">Hjelp byens innbyggere med deres problemer og tjen belønninger.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {activeTab === 'tjenester' && (
-                  <div className="grid grid-cols-1 gap-6">
-                    {services.map(service => (
-                      <div key={service.id} className="bg-gray-700 bg-opacity-70 rounded-lg p-6 border border-gray-600 hover:border-yellow-600 transition-colors">
-                        <div className="flex items-center mb-4">
-                          <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center text-2xl mr-4">
-                            {service.icon}
-                          </div>
-                          <h3 className="text-xl font-bold text-yellow-400">{service.name}</h3>
-                        </div>
-                        
-                        <p className="text-gray-300 mb-4">{service.description}</p>
-                        
-                        {service.path ? (
-                          <button 
-                            onClick={() => navigate(service.path)}
-                            className="w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors"
-                          >
-                            Besøk {service.name.toLowerCase()}
-                          </button>
-                        ) : (
-                          <button className="w-full py-2 bg-gray-700 text-gray-400 rounded-md cursor-not-allowed">
-                            Kommer snart
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {activeTab === 'oppdrag' && (
-                  <div className="space-y-4">
-                    {availableQuests.map(quest => (
-                      <div key={quest.id} className="bg-gray-700 bg-opacity-70 rounded-lg p-5 border border-gray-600">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="text-xl font-bold text-yellow-400">{quest.title}</h3>
-                            <div className="text-sm text-gray-400 mb-3">Nivå {quest.level} oppdrag</div>
-                          </div>
-                          <div className="bg-yellow-900 text-yellow-300 px-3 py-1 rounded-full text-xs font-medium">
-                            Belønning: {quest.reward_gold} gull, {quest.reward_xp} XP
-                          </div>
-                        </div>
-                        <p className="text-gray-300 mb-4">{quest.description}</p>
-                        <div className="flex justify-end">
-                          <button 
-                            onClick={() => navigate(`/quests/${quest.id}`)}
-                            className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors"
-                          >
-                            Se oppdrag
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {availableQuests.length === 0 && (
-                      <div className="text-center text-gray-400 py-8">
-                        Ingen tilgjengelige oppdrag i denne byen for øyeblikket.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
           
-          {/* Høyre kolonne - bybilde i stedet for chat */}
+          {/* Høyre kolonne - bybilde */}
           <div className="lg:col-span-1">
             <div className="bg-gray-800 bg-opacity-90 rounded-lg border border-gray-700 shadow-lg overflow-hidden h-full">
               <h2 className="text-xl font-bold text-yellow-500 p-4 border-b border-gray-700">
@@ -665,7 +535,6 @@ Orkene i Skyggeborg er stolte og sterke. De var en gang under Skyggens kontroll,
               </h2>
               
               <div className="p-4">
-                {/* Her viser vi et stort bilde av byen */}
                 <div className="aspect-w-4 aspect-h-3 rounded-lg overflow-hidden border-2 border-gray-600 mb-4">
                   <img 
                     src={getBackgroundImage()} 
@@ -674,7 +543,6 @@ Orkene i Skyggeborg er stolte og sterke. De var en gang under Skyggens kontroll,
                   />
                 </div>
                 
-                {/* Informasjon om byen under bildet */}
                 <div className="space-y-4">
                   <div>
                     <h3 className="font-bold text-yellow-400 text-lg">Herskere</h3>
@@ -714,6 +582,104 @@ Orkene i Skyggeborg er stolte og sterke. De var en gang under Skyggens kontroll,
           </div>
         </div>
       </div>
+
+      {/* Tjenester Modal */}
+      {showServicesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full p-6 border border-gray-700 shadow-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-yellow-500">Byens tjenester</h2>
+              <button 
+                onClick={() => setShowServicesModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-6">
+              {services.map(service => (
+                <div key={service.id} className="bg-gray-700 bg-opacity-70 rounded-lg p-6 border border-gray-600 hover:border-yellow-600 transition-colors">
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center text-2xl mr-4">
+                      {service.icon}
+                    </div>
+                    <h3 className="text-xl font-bold text-yellow-400">{service.name}</h3>
+                  </div>
+                  
+                  <p className="text-gray-300 mb-4">{service.description}</p>
+                  
+                  {service.path ? (
+                    <button 
+                      onClick={() => {
+                        setShowServicesModal(false);
+                        navigate(service.path);
+                      }}
+                      className="w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors"
+                    >
+                      Besøk {service.name.toLowerCase()}
+                    </button>
+                  ) : (
+                    <button className="w-full py-2 bg-gray-700 text-gray-400 rounded-md cursor-not-allowed">
+                      Kommer snart
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Oppdrag Modal */}
+      {showQuestsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full p-6 border border-gray-700 shadow-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-yellow-500">Tilgjengelige oppdrag</h2>
+              <button 
+                onClick={() => setShowQuestsModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {availableQuests.map(quest => (
+                <div key={quest.id} className="bg-gray-700 bg-opacity-70 rounded-lg p-5 border border-gray-600">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-bold text-yellow-400">{quest.title}</h3>
+                      <div className="text-sm text-gray-400 mb-3">Nivå {quest.level} oppdrag</div>
+                    </div>
+                    <div className="bg-yellow-900 text-yellow-300 px-3 py-1 rounded-full text-xs font-medium">
+                      Belønning: {quest.reward_gold} gull, {quest.reward_xp} XP
+                    </div>
+                  </div>
+                  <p className="text-gray-300 mb-4">{quest.description}</p>
+                  <div className="flex justify-end">
+                    <button 
+                      onClick={() => {
+                        setShowQuestsModal(false);
+                        navigate(`/quests/${quest.id}`);
+                      }}
+                      className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors"
+                    >
+                      Se oppdrag
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {availableQuests.length === 0 && (
+                <div className="text-center text-gray-400 py-8">
+                  Ingen tilgjengelige oppdrag i denne byen for øyeblikket.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 } 

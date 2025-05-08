@@ -6,6 +6,7 @@ import backgroundImage from '../assets/store.jpg'
 import seedrandom from 'seedrandom'
 import { getCharacterItems } from '../lib/characterData'
 import useCharacter from '../hooks/useCharacter'
+import { toast } from 'react-hot-toast'
 
 export default function Shop() {
   const { cityId } = useParams()
@@ -23,6 +24,7 @@ export default function Shop() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('alle')
   const [selectedItems, setSelectedItems] = useState([])
+  const [respawnTimers, setRespawnTimers] = useState({})
 
   // Redirect hvis ikke logget inn
   useEffect(() => {
@@ -46,13 +48,27 @@ export default function Shop() {
         
         setCity(cityData)
         
-        // Hent varer tilgjengelig i butikken (simulert data)
-        const items = generateShopItems()
+        // Hent varer tilgjengelig i butikken
+        const items = await generateShopItems()
         setShopItems(items)
         
-        // Hent spillerens inventar (simulert data)
+        // Hent spillerens inventar og gullbeholdning umiddelbart
         const inventory = await fetchPlayerInventory()
         setPlayerInventory(inventory)
+
+        // Hent oppdatert gullbeholdning direkte fra characters-tabellen
+        const { data: characterData, error: characterError } = await supabase
+          .from('characters')
+          .select('coins')
+          .eq('id', character.id)
+          .single();
+
+        if (!characterError && characterData) {
+          setPlayerInventory(prev => ({
+            ...prev,
+            gold: characterData.coins
+          }));
+        }
         
         setLoading(false)
       } catch (error) {
@@ -64,7 +80,41 @@ export default function Shop() {
     if (!authLoading) {
       loadShopData()
     }
-  }, [cityId, user, authLoading, navigate])
+  }, [cityId, user, authLoading, navigate, character])
+
+  // Oppdater respawn-timere hvert sekund
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const newTimers = {};
+      
+      shopItems.forEach(item => {
+        if (item.stock <= 0 && item.lastRespawn) {
+          const lastRespawn = new Date(item.lastRespawn);
+          const timeSinceLastRespawn = Math.floor((now - lastRespawn) / 1000);
+          const timeUntilRespawn = Math.max(0, item.respawnTimer - timeSinceLastRespawn);
+          
+          if (timeUntilRespawn > 0) {
+            newTimers[item.id] = timeUntilRespawn;
+          } else {
+            // Hvis respawn-tiden er over, oppdater lagerbeholdning
+            generateShopItems();
+          }
+        }
+      });
+      
+      setRespawnTimers(newTimers);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [shopItems]);
+
+  // Formater tid til lesbart format
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   // Hjelpefunksjon for å få bynavn basert på ID
   function getCityNameById(id) {
@@ -129,18 +179,75 @@ export default function Shop() {
   }
   
   // Generer vareutvalg basert på by
-  const generateShopItems = () => {
+  const generateShopItems = async () => {
     try {
-      // Forsøk å generere varer basert på cityId
-      if (!cityId) return []
+      if (!cityId) return [];
       
-      // Returner tom liste for nå
-      return []
+      // Hent shop_items for denne byen
+      const { data: shopItems, error } = await supabase
+        .from('shop_items')
+        .select(`
+          *,
+          items:item_id (*)
+        `)
+        .eq('city_id', cityId);
+      
+      if (error) {
+        console.error('Feil ved henting av butikkvarer:', error);
+        return [];
+      }
+      
+      // Sjekk og oppdater respawn for hver gjenstand
+      const now = new Date();
+      const updatedShopItems = await Promise.all(shopItems.map(async (si) => {
+        const lastRespawn = new Date(si.last_respawn);
+        const timeSinceLastRespawn = Math.floor((now - lastRespawn) / 1000); // i sekunder
+        
+        if (si.stock < si.items.max_stock && timeSinceLastRespawn >= si.respawn_timer) {
+          // Beregn antall respawns siden sist
+          const respawns = Math.floor(timeSinceLastRespawn / si.respawn_timer);
+          const newStock = Math.min(si.items.max_stock, si.stock + respawns);
+          
+          // Oppdater lagerbeholdning i databasen
+          const { error: updateError } = await supabase
+            .from('shop_items')
+            .update({
+              stock: newStock,
+              last_respawn: now.toISOString()
+            })
+            .eq('id', si.id);
+          
+          if (updateError) {
+            console.error('Feil ved oppdatering av lagerbeholdning:', updateError);
+            return si;
+          }
+          
+          return {
+            ...si,
+            stock: newStock,
+            last_respawn: now.toISOString()
+          };
+        }
+        
+        return si;
+      }));
+      
+      // Formater data for visning
+      return updatedShopItems.map(si => ({
+        id: si.id,
+        ...si.items,
+        buyPrice: si.price,
+        stock: si.stock,
+        sellPrice: Math.floor(si.price * 0.5), // 50% av kjøpspris som standard
+        respawnTimer: si.respawn_timer,
+        lastRespawn: si.last_respawn,
+        max_stock: si.items.max_stock
+      }));
     } catch (error) {
-      console.error('Feil ved generering av butikkvarer:', error)
-      return []
+      console.error('Feil ved generering av butikkvarer:', error);
+      return [];
     }
-  }
+  };
   
   // Hent spillerens inventar
   async function fetchPlayerInventory() {
@@ -150,6 +257,23 @@ export default function Shop() {
       // Hent gjenstander fra items-tabellen
       const items = await getCharacterItems(character.id);
       
+      // Hent oppdatert character-data for å få riktig gullbeholdning
+      const { data: characterData, error: characterError } = await supabase
+        .from('characters')
+        .select('coins')
+        .eq('id', character.id)
+        .single();
+
+      if (characterError) {
+        console.error('Feil ved henting av gullbeholdning:', characterError);
+        return { items: [], gold: 0 };
+      }
+
+      // Oppdater character-objektet med ny gullbeholdning
+      if (characterData) {
+        character.coins = characterData.coins;
+      }
+      
       // Legg til sellPrice basert på value hvis det mangler
       const itemsWithSellPrice = items.map(item => ({
         ...item,
@@ -158,7 +282,7 @@ export default function Shop() {
       
       return {
         items: itemsWithSellPrice || [],
-        gold: character.coins || 0
+        gold: characterData?.coins || 0
       }
     } catch (error) {
       console.error('Error fetching inventory:', error)
@@ -166,6 +290,16 @@ export default function Shop() {
     }
   }
   
+  // Oppdater inventar og gullbeholdning periodisk
+  useEffect(() => {
+    const updateInterval = setInterval(async () => {
+      const inventory = await fetchPlayerInventory();
+      setPlayerInventory(inventory);
+    }, 5000); // Oppdater hvert 5. sekund
+
+    return () => clearInterval(updateInterval);
+  }, [character]);
+
   // Farger for sjeldenhetsgrader
   const getRarityColor = (rarity) => {
     switch (rarity) {
@@ -216,50 +350,142 @@ export default function Shop() {
   }
   
   // Håndter kjøp av en gjenstand
-  const handleBuyItem = (item) => {
-    if (playerInventory.gold < item.buyPrice) {
-      alert('Du har ikke nok gull til å kjøpe denne gjenstanden!')
-      return
+  const handleBuyItem = async (item) => {
+    try {
+      // Sjekk om spilleren har nok gull
+      if (playerInventory.gold < item.buyPrice) {
+        toast.error('Du har ikke nok gull');
+        return;
+      }
+
+      // Sjekk om det er nok på lager
+      if (item.stock <= 0) {
+        toast.error('Dette itemet er utsolgt');
+        return;
+      }
+
+      // Start en transaksjon
+      const { data: shopItems, error: fetchError } = await supabase
+        .from('shop_items')
+        .select('*')
+        .eq('item_id', item.id)
+        .eq('city_id', cityId);
+
+      if (fetchError) throw fetchError;
+      if (!shopItems || shopItems.length === 0) {
+        toast.error('Kunne ikke finne varen i butikken');
+        return;
+      }
+
+      const shopItem = shopItems[0];
+
+      // Dobbeltsjekk lagerbeholdning
+      if (shopItem.stock <= 0) {
+        toast.error('Dette itemet er utsolgt');
+        return;
+      }
+
+      // Oppdater lagerbeholdning
+      const { error: updateError } = await supabase
+        .from('shop_items')
+        .update({ 
+          stock: shopItem.stock - 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', shopItem.id);
+
+      if (updateError) throw updateError;
+
+      // Sjekk om spilleren allerede har dette itemet
+      const { data: existingItem, error: checkError } = await supabase
+        .from('character_items')
+        .select('*')
+        .eq('character_id', character.id)
+        .eq('item_id', item.id)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+      if (existingItem) {
+        // Oppdater antall hvis itemet allerede finnes
+        const { error: updateItemError } = await supabase
+          .from('character_items')
+          .update({ quantity: existingItem.quantity + 1 })
+          .eq('character_id', character.id)
+          .eq('item_id', item.id);
+
+        if (updateItemError) throw updateItemError;
+      } else {
+        // Legg til nytt item hvis det ikke finnes
+        const { error: insertError } = await supabase
+          .from('character_items')
+          .insert({
+            character_id: character.id,
+            item_id: item.id,
+            quantity: 1,
+            equipped: false
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // Oppdater spillerens gull
+      const { error: goldError } = await supabase
+        .from('characters')
+        .update({ 
+          coins: playerInventory.gold - item.buyPrice 
+        })
+        .eq('id', character.id);
+
+      if (goldError) throw goldError;
+
+      // Oppdater lokalt state
+      setPlayerInventory(prev => ({
+        ...prev,
+        gold: prev.gold - item.buyPrice,
+        items: prev.items.some(i => i.id === item.id)
+          ? prev.items.map(i => 
+              i.id === item.id 
+                ? { ...i, quantity: i.quantity + 1 }
+                : i
+            )
+          : [...prev.items, { ...item, quantity: 1 }]
+      }));
+
+      setShopItems(prev => 
+        prev.map(shopItem => 
+          shopItem.id === item.id 
+            ? { ...shopItem, stock: shopItem.stock - 1 }
+            : shopItem
+        )
+      );
+
+      // Vis tematisk popup
+      const popup = document.createElement('div');
+      popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 border border-green-600 text-green-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
+      popup.innerHTML = `
+        <div class="flex items-center">
+          <span class="text-2xl mr-2">🛍️</span>
+          <div>
+            <p class="font-bold">Kjøp vellykket!</p>
+            <p class="text-sm">Du kjøpte ${item.name} for ${item.buyPrice} gull</p>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(popup);
+      
+      // Fjern popup etter 3 sekunder
+      setTimeout(() => {
+        popup.classList.add('animate-fade-out');
+        setTimeout(() => popup.remove(), 500);
+      }, 3000);
+
+      toast.success('Kjøp vellykket!');
+    } catch (error) {
+      console.error('Feil ved kjøp av item:', error);
+      toast.error('Kunne ikke kjøpe item');
     }
-    
-    // Sjekk om spilleren allerede har gjenstanden
-    const existingItem = playerInventory.items.find(i => i.name === item.name)
-    
-    // Oppdater inventar
-    if (existingItem) {
-      setPlayerInventory({
-        ...playerInventory,
-        items: playerInventory.items.map(i => 
-          i.name === item.name 
-            ? { ...i, quantity: i.quantity + 1 } 
-            : i
-        ),
-        gold: playerInventory.gold - item.buyPrice
-      })
-    } else {
-      setPlayerInventory({
-        ...playerInventory,
-        items: [
-          ...playerInventory.items, 
-          { 
-            ...item, 
-            quantity: 1, 
-            sellPrice: item.sellPrice
-          }
-        ],
-        gold: playerInventory.gold - item.buyPrice
-      })
-    }
-    
-    // Oppdater beholdning i butikken
-    setShopItems(shopItems.map(i => 
-      i.id === item.id 
-        ? { ...i, stock: i.stock - 1 } 
-        : i
-    ))
-    
-    alert(`Du kjøpte 1 ${item.name} for ${item.buyPrice} gull.`)
-  }
+  };
   
   // Håndter salg av en gjenstand
   const handleSellItem = async (item) => {
@@ -336,7 +562,7 @@ export default function Shop() {
       
       // Vis tematisk popup
       const popup = document.createElement('div');
-      popup.className = 'fixed top-4 right-4 bg-gray-800 border border-yellow-600 text-yellow-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
+      popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 border border-yellow-600 text-yellow-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
       popup.innerHTML = `
         <div class="flex items-center">
           <span class="text-2xl mr-2">💰</span>
@@ -358,7 +584,7 @@ export default function Shop() {
       console.error('Error selling item:', error);
       // Vis tematisk feilmelding
       const popup = document.createElement('div');
-      popup.className = 'fixed top-4 right-4 bg-gray-800 border border-red-600 text-red-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
+      popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 border border-red-600 text-red-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
       popup.innerHTML = `
         <div class="flex items-center">
           <span class="text-2xl mr-2">❌</span>
@@ -404,7 +630,7 @@ export default function Shop() {
     if (selectedItems.length === 0) {
       // Vis tematisk melding
       const popup = document.createElement('div');
-      popup.className = 'fixed top-4 right-4 bg-gray-800 border border-yellow-600 text-yellow-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
+      popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 border border-yellow-600 text-yellow-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
       popup.innerHTML = `
         <div class="flex items-center">
           <span class="text-2xl mr-2">⚠️</span>
@@ -502,7 +728,7 @@ export default function Shop() {
       
       // Vis tematisk popup
       const popup = document.createElement('div');
-      popup.className = 'fixed top-4 right-4 bg-gray-800 border border-yellow-600 text-yellow-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
+      popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 border border-yellow-600 text-yellow-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
       popup.innerHTML = `
         <div class="flex items-center">
           <span class="text-2xl mr-2">💰</span>
@@ -524,7 +750,7 @@ export default function Shop() {
       console.error('Error selling items:', error);
       // Vis tematisk feilmelding
       const popup = document.createElement('div');
-      popup.className = 'fixed top-4 right-4 bg-gray-800 border border-red-600 text-red-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
+      popup.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 border border-red-600 text-red-400 p-4 rounded-lg shadow-lg z-50 animate-fade-in';
       popup.innerHTML = `
         <div class="flex items-center">
           <span class="text-2xl mr-2">❌</span>
@@ -694,7 +920,18 @@ export default function Shop() {
                     </div>
                     
                     <div className="text-sm text-gray-400">
-                      På lager: {item.stock}
+                      {item.stock > 0 ? (
+                        `På lager: ${item.stock}`
+                      ) : (
+                        <div className="flex items-center text-red-400">
+                          <span className="mr-1">⏳</span>
+                          {respawnTimers[item.id] ? (
+                            `Tilbake om: ${formatTime(respawnTimers[item.id])}`
+                          ) : (
+                            'Utsolgt'
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   

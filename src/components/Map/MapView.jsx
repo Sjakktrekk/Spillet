@@ -39,8 +39,8 @@ export default function MapView() {
           name: 'Nordhavn',
           description: 'Et handelssentrum ved kysten. Menneskene er kjent for sin tilpasningsdyktighet og nysgjerrighet. De søker kunnskap og makt.',
           race: 'Mennesker',
-          x_position: 35,
-          y_position: 25,
+          x_position: 28.23,
+          y_position: 45.96,
           population: 12500
         },
         {
@@ -48,8 +48,8 @@ export default function MapView() {
           name: 'Eldoria',
           description: 'En skogskledd by skjult blant eldgamle trær. Alvene vokter naturens hemmeligheter og har en sterk tilknytning til magi.',
           race: 'Alver',
-          x_position: 65,
-          y_position: 45,
+          x_position: 22.17,
+          y_position: 21.09,
           population: 8200
         },
         {
@@ -57,8 +57,8 @@ export default function MapView() {
           name: 'Tanak-dun',
           description: 'En fjellfestning gravd dypt i Bergrammene. Dvergene er mestere i smedkunst, gruvedrift og gamle runer.',
           race: 'Dverger',
-          x_position: 20,
-          y_position: 55,
+          x_position: 87.27,
+          y_position: 12.89,
           population: 7800
         },
         {
@@ -66,8 +66,8 @@ export default function MapView() {
           name: 'Skyggeborg',
           description: 'En tidligere krigsby som nå forsøker å gjenoppbygge sitt rykte. Orkene var en gang under Skyggens kontroll, men søker nå en ny ære.',
           race: 'Orker',
-          x_position: 50,
-          y_position: 75,
+          x_position: 81.08,
+          y_position: 72.92,
           population: 9300
         }
       ]
@@ -174,6 +174,10 @@ export default function MapView() {
         src={mapImage} 
         alt="Fantasy World Map" 
         className="w-full h-full object-cover opacity-90"
+        onError={(e) => {
+          console.error('Feil ved lasting av kartbilde');
+          e.target.style.display = 'none';
+        }}
       />
       
       {cities.map((city) => (
@@ -187,18 +191,31 @@ export default function MapView() {
           }}
           onClick={() => handleCityClick(city)}
         >
-          {/* Markør som viser spillerens gjeldende posisjon */}
-          {playerCity && playerCity.id === city.id && (
-            <div className="absolute inset-0 transform -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2">
-              <div className="w-8 h-8 rounded-full border-2 border-green-500 animate-pulse"></div>
+          {/* Usynlig klikkbar sone med zoom-effekt */}
+          <div className={`w-[150px] h-[150px] rounded-full transition-all duration-300 ease-in-out transform relative ${
+            playerCity && playerCity.id === city.id 
+              ? 'opacity-100 scale-150' 
+              : 'opacity-0 group-hover:opacity-100 group-hover:scale-150'
+          }`}>
+            {/* Kul effekt - glødende ring med flere lag */}
+            <div className="absolute inset-4 rounded-full border-4 border-yellow-500/30 animate-pulse"></div>
+            <div className="absolute inset-8 rounded-full border-4 border-yellow-500/20 animate-pulse delay-75"></div>
+            <div className="absolute inset-12 rounded-full border-4 border-yellow-500/10 animate-pulse delay-150"></div>
+            
+            {/* Sentral glødende effekt */}
+            <div className="absolute inset-1/4 rounded-full bg-yellow-500/20 animate-pulse"></div>
+            
+            {/* Radiant effekt */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-yellow-500/0 via-yellow-500/10 to-yellow-500/0 animate-spin-slow"></div>
+          </div>
+
+          {/* Byinformasjon som vises kun ved hover på andre byer */}
+          {(!playerCity || playerCity.id !== city.id) && (
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-6 px-4 py-3 bg-gray-800/95 border-2 border-yellow-500 rounded-lg shadow-lg transition-all duration-300 min-w-[250px] pointer-events-none backdrop-blur-sm opacity-0 group-hover:opacity-100">
+              <h3 className="font-bold text-yellow-400 text-lg mb-2">{city.name}</h3>
+              <p className="text-sm text-gray-300">{city.description}</p>
             </div>
           )}
-          
-          <div className="w-4 h-4 bg-yellow-500 rounded-full border-2 border-white shadow-md group-hover:scale-125 transition-transform"></div>
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 border border-yellow-500 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity min-w-[200px] pointer-events-none">
-            <h3 className="font-bold text-yellow-400">{city.name}</h3>
-            <p className="text-sm text-gray-300">{city.description}</p>
-          </div>
         </div>
       ))}
 

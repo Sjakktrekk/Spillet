@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { getRaces, getClasses, createCharacter, getAvatars, addStartingEquipment, deleteCharacter } from '../lib/characterData'
+import { getRaces, getClasses, createCharacter, getAvatars, deleteCharacter } from '../lib/characterData'
 import { supabase } from '../lib/supabase'
+import characterCreationBg from '../assets/character-creation.jpg'
+import ccNpc from '../assets/NPC/cc-npc.png'
 
 export default function CharacterCreation() {
   const { user } = useAuth()
@@ -18,6 +20,9 @@ export default function CharacterCreation() {
   const [hasExistingCharacter, setHasExistingCharacter] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
   const [deletingCharacter, setDeletingCharacter] = useState(false)
+  const [currentStep, setCurrentStep] = useState('welcome')
+  const [showRaceModal, setShowRaceModal] = useState(false)
+  const [showClassModal, setShowClassModal] = useState(false)
 
   const [character, setCharacter] = useState({
     name: '',
@@ -25,6 +30,14 @@ export default function CharacterCreation() {
     class_id: '',
     avatar_url: '',
   })
+
+  const npcDialogues = {
+    welcome: "Velkommen, eventyrer! Jeg er din guide i denne magiske verdenen. La oss begynne med å gi deg et navn som vil bli kjent gjennom hele Eldoria.",
+    nameEntered: "Et flott navn! Nå skal vi velge din rase. Hver rase har sine egne styrker og særegenheter. La meg fortelle deg om dem...",
+    raceSelected: "Utmerket valg! Nå skal vi finne den perfekte klassen for deg. Hver klasse har sin egen unike sti til makt og ære...",
+    classSelected: "Fantastisk! Du har nå valgt både rase og klasse. La oss velge et utseende som passer til din nye identitet.",
+    ready: "Perfekt! Du er nå klar til å begynne ditt eventyr. Er du klar til å trå inn i historien?"
+  }
 
   useEffect(() => {
     async function loadData() {
@@ -108,6 +121,27 @@ export default function CharacterCreation() {
     setCharacter(prev => ({ ...prev, avatar_url: avatar.url }))
   }
 
+  const handleNameSubmit = (e) => {
+    e.preventDefault()
+    if (character.name.trim()) {
+      setCurrentStep('nameEntered')
+    }
+  }
+
+  const handleRaceSelect = (race) => {
+    setCharacter(prev => ({ ...prev, race_id: race.id }))
+    setSelectedRace(race)
+    setShowRaceModal(false)
+    setCurrentStep('raceSelected')
+  }
+
+  const handleClassSelect = (cls) => {
+    setCharacter(prev => ({ ...prev, class_id: cls.id }))
+    setSelectedClass(cls)
+    setShowClassModal(false)
+    setCurrentStep('classSelected')
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -186,9 +220,6 @@ export default function CharacterCreation() {
       // Oppretter karakteren i databasen
       const createdCharacter = await createCharacter(newCharacter)
       
-      // Legg til startutstyr til den nye karakteren
-      await addStartingEquipment(createdCharacter.id, parseInt(character.class_id))
-      
       // Omdiriger til hovedsiden
       navigate('/home')
     } catch (error) {
@@ -215,7 +246,7 @@ export default function CharacterCreation() {
       <div 
         className="min-h-screen flex items-center justify-center bg-gray-900"
         style={{ 
-          backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.8)), url("https://images.unsplash.com/photo-1542751371-adc38448a05e?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=1920")',
+          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.3)), url(${characterCreationBg})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundAttachment: 'fixed'
@@ -233,237 +264,255 @@ export default function CharacterCreation() {
     <div 
       className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8"
       style={{ 
-        backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.8)), url("https://images.unsplash.com/photo-1542751371-adc38448a05e?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=1920")',
+        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.3)), url(${characterCreationBg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed'
       }}
     >
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="mx-auto w-24 h-24 mb-6 bg-contain bg-center bg-no-repeat" 
-          style={{ backgroundImage: 'url("https://static.vecteezy.com/system/resources/previews/009/664/031/original/shield-with-sword-game-icon-free-vector.jpg")' }}>
-        </div>
-        <h1 className="text-5xl font-extrabold text-center text-yellow-500 mb-2 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-          Karakterskaping
-        </h1>
-        <h2 className="text-xl text-center text-gray-300 mb-8 italic drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
-          Velg din skjebne i den magiske verdenen
-        </h2>
-      </div>
-      
-      <div className="sm:mx-auto sm:w-full sm:max-w-xl">
-        <div className="relative bg-gray-900 bg-opacity-80 py-8 px-6 rounded-lg sm:px-10 border-2 border-yellow-700 shadow-[0_0_15px_rgba(234,179,8,0.3)]">
-          {/* Dekorative hjørner */}
-          <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-yellow-600"></div>
-          <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-yellow-600"></div>
-          <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-yellow-600"></div>
-          <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-yellow-600"></div>
-          
-          {error && (
-            <div className="bg-red-900 border border-red-600 text-red-200 px-4 py-3 rounded mb-4">
-              {error}
+      <div className="sm:mx-auto sm:w-full sm:max-w-7xl">
+        <div className="grid grid-cols-2 gap-8">
+          {/* Venstre boks - NPC */}
+          <div className="flex items-center justify-start">
+            <div className="relative w-[500px] h-[500px]">
+              <div className="absolute inset-0 animate-pulse bg-yellow-500/20 rounded-full blur-xl"></div>
+              <img 
+                src={ccNpc} 
+                alt="Guide NPC" 
+                className="w-full h-full object-contain relative z-10 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]"
+              />
             </div>
-          )}
+          </div>
 
-          {hasExistingCharacter ? (
-            <div className="text-center py-6">
-              <div className="text-yellow-500 mb-2 text-xl font-bold">Du har allerede en karakter</div>
-              <p className="text-gray-300 mb-6">
-                Du har allerede opprettet karakteren <span className="text-yellow-400 font-semibold">{hasExistingCharacter.name}</span>.
-                I denne versjonen kan hver bruker kun ha én karakter.
-              </p>
-
-              {deleteConfirmation ? (
-                <div className="bg-red-900 bg-opacity-50 p-4 rounded-lg border border-red-600 mb-6">
-                  <p className="text-white mb-4">Er du sikker på at du vil slette din eksisterende karakter? Dette kan ikke angres.</p>
-                  <div className="flex justify-center space-x-4">
-                    <button
-                      onClick={handleDeleteCharacter}
-                      disabled={deletingCharacter}
-                      className={`px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md ${deletingCharacter ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      {deletingCharacter ? 'Sletter...' : 'Ja, slett karakter'}
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmation(false)}
-                      disabled={deletingCharacter}
-                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md"
-                    >
-                      Avbryt
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col space-y-4">
-                  <button
-                    onClick={() => setDeleteConfirmation(true)}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
-                  >
-                    Slett eksisterende karakter
-                  </button>
-                  <button
-                    onClick={() => navigate('/home')}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md"
-                  >
-                    Gå tilbake til spillet
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-yellow-500 mb-1">
-                  Karakternavn
-                </label>
-                <input
-                  type="text"
-                  value={character.name}
-                  onChange={(e) => setCharacter({ ...character, name: e.target.value })}
-                  className="mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                  required
-                />
+          {/* Høyre boks - Dialog og innhold */}
+          <div className="bg-gray-900 bg-opacity-80 py-8 px-6 rounded-lg border-2 border-yellow-700 shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+            {/* Dialog */}
+            <div className="mb-8">
+              <div className="bg-gray-800 p-6 rounded-lg border border-yellow-600 relative">
+                <div className="absolute -left-4 top-6 w-8 h-8 transform rotate-45 bg-gray-800 border-l border-b border-yellow-600"></div>
+                <div className="text-yellow-400 text-xl mb-2">Din Guide</div>
+                <p className="text-gray-300 text-lg leading-relaxed">{npcDialogues[currentStep]}</p>
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Character Creation Form */}
+            {currentStep === 'welcome' && (
+              <form onSubmit={handleNameSubmit} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-yellow-500 mb-1">
-                    Rase
+                    Hva skal din karakter hete?
                   </label>
-                  <select
-                    value={character.race_id}
-                    onChange={(e) => setCharacter({ 
-                      ...character, 
-                      race_id: e.target.value ? parseInt(e.target.value) : '' 
-                    })}
+                  <input
+                    type="text"
+                    value={character.name}
+                    onChange={(e) => setCharacter({ ...character, name: e.target.value })}
                     className="mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                     required
-                  >
-                    <option value="">Velg rase</option>
-                    {races.map((race) => (
-                      <option key={race.id} value={race.id}>
-                        {race.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-yellow-500 mb-1">
-                    Klasse
-                  </label>
-                  <select
-                    value={character.class_id}
-                    onChange={(e) => setCharacter({ 
-                      ...character, 
-                      class_id: e.target.value ? parseInt(e.target.value) : '' 
-                    })}
-                    className="mt-1 block w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                    required
-                  >
-                    <option value="">Velg klasse</option>
-                    {classes.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Avatar velger */}
-              {selectedRace && (
-                <div className="mt-4 border-t border-gray-700 pt-6">
-                  <label className="block text-sm font-medium text-yellow-500 mb-3">
-                    Velg Avatar
-                  </label>
-                  
-                  {avatars.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {avatars.map((avatar, index) => (
-                        <div 
-                          key={index} 
-                          onClick={() => handleSelectAvatar(avatar)}
-                          className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
-                            selectedAvatar === avatar ? 'border-yellow-500 ring-2 ring-yellow-400' : 'border-gray-700 hover:border-gray-500'
-                          }`}
-                        >
-                          <img 
-                            src={avatar.url} 
-                            alt={`${selectedRace.name} avatar ${index + 1}`} 
-                            className="w-full h-32 object-cover"
-                          />
-                          {selectedAvatar === avatar && (
-                            <div className="absolute top-1 right-1 bg-yellow-500 rounded-full p-1">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-900" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 bg-gray-800 rounded-lg border border-gray-700">
-                      <p className="text-gray-400">Ingen avatarer tilgjengelig for valgt rase</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Viser attributter for valgt rase og klasse */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 border-t border-gray-700 pt-6">
-                {selectedRace && (
-                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <div className="flex items-center mb-3">
-                      <div className="w-10 h-10 rounded-full bg-yellow-600 flex items-center justify-center text-xl mr-3">
-                        {selectedRace.icon || '👤'}
-                      </div>
-                      <h3 className="text-lg font-medium text-yellow-400">{selectedRace.name}</h3>
-                    </div>
-                    <p className="text-sm text-gray-300 mb-3">{selectedRace.description || 'Ingen beskrivelse tilgjengelig'}</p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="text-gray-400">Styrke:</div>
-                      <div className="text-right text-green-400">+{selectedRace.strength_bonus || 0}</div>
-                      <div className="text-gray-400">Kunnskap:</div>
-                      <div className="text-right text-green-400">+{selectedRace.knowledge_bonus || 0}</div>
-                      <div className="text-gray-400">List:</div>
-                      <div className="text-right text-green-400">+{selectedRace.agility_bonus || 0}</div>
-                      <div className="text-gray-400">Innsikt:</div>
-                      <div className="text-right text-green-400">+{selectedRace.magic_bonus || 0}</div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedClass && (
-                  <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <div className="flex items-center mb-3">
-                      <div className="w-10 h-10 rounded-full bg-yellow-600 flex items-center justify-center text-xl mr-3">
-                        {selectedClass.icon || '⚔️'}
-                      </div>
-                      <h3 className="text-lg font-medium text-yellow-400">{selectedClass.name}</h3>
-                    </div>
-                    <p className="text-sm text-gray-300 mb-3">{selectedClass.description || 'Ingen beskrivelse tilgjengelig'}</p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="text-gray-400">Startmynt:</div>
-                      <div className="text-right text-yellow-400">{selectedClass.starting_coins || 0} gull</div>
-                      <div className="text-gray-400">Hovedattributt:</div>
-                      <div className="text-right text-blue-400">{selectedClass.primary_attribute || 'Ukjent'}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-6">
                 <button
                   type="submit"
                   className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-gray-900 bg-yellow-600 hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors duration-200"
                 >
+                  Fortsett
+                </button>
+              </form>
+            )}
+
+            {currentStep === 'nameEntered' && (
+              <div className="text-center">
+                <button
+                  onClick={() => setShowRaceModal(true)}
+                  className="px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-lg font-medium transition-colors duration-200"
+                >
+                  Velg din rase
+                </button>
+              </div>
+            )}
+
+            {/* Race Selection Modal */}
+            {showRaceModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                <div className="bg-gray-900 p-6 rounded-lg max-w-2xl w-full mx-4 border-2 border-yellow-600">
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-4">Velg din rase</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {races.map((race) => (
+                      <div
+                        key={race.id}
+                        onClick={() => handleRaceSelect(race)}
+                        className="bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-yellow-500 cursor-pointer transition-colors duration-200"
+                      >
+                        <div className="flex items-center mb-2">
+                          <div className="w-10 h-10 rounded-full bg-yellow-600 flex items-center justify-center text-xl mr-3">
+                            {race.icon || '👤'}
+                          </div>
+                          <h3 className="text-lg font-medium text-yellow-400">{race.name}</h3>
+                        </div>
+                        <p className="text-sm text-gray-300 mb-3">{race.description}</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {race.combat_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Kamp:</div>
+                              <div className="text-right text-green-400">+{race.combat_bonus}</div>
+                            </>
+                          )}
+                          {race.endurance_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Utholdenhet:</div>
+                              <div className="text-right text-green-400">+{race.endurance_bonus}</div>
+                            </>
+                          )}
+                          {race.exploration_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Utforskning:</div>
+                              <div className="text-right text-green-400">+{race.exploration_bonus}</div>
+                            </>
+                          )}
+                          {race.knowledge_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Kunnskap:</div>
+                              <div className="text-right text-green-400">+{race.knowledge_bonus}</div>
+                            </>
+                          )}
+                          {race.magic_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Magi:</div>
+                              <div className="text-right text-green-400">+{race.magic_bonus}</div>
+                            </>
+                          )}
+                          {race.persuasion_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Overtalelse:</div>
+                              <div className="text-right text-green-400">+{race.persuasion_bonus}</div>
+                            </>
+                          )}
+                          {race.crafting_bonus > 0 && (
+                            <>
+                              <div className="text-gray-400">Håndverk:</div>
+                              <div className="text-right text-green-400">+{race.crafting_bonus}</div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Class Selection Modal */}
+            {showClassModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                <div className="bg-gray-900 p-6 rounded-lg max-w-2xl w-full mx-4 border-2 border-yellow-600">
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-4">Velg din klasse</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {classes.map((cls) => (
+                      <div
+                        key={cls.id}
+                        onClick={() => handleClassSelect(cls)}
+                        className="bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-yellow-500 cursor-pointer transition-colors duration-200"
+                      >
+                        <div className="flex items-center mb-2">
+                          <div className="w-10 h-10 rounded-full bg-yellow-600 flex items-center justify-center text-xl mr-3">
+                            {cls.icon || '⚔️'}
+                          </div>
+                          <h3 className="text-lg font-medium text-yellow-400">{cls.name}</h3>
+                        </div>
+                        <p className="text-sm text-gray-300 mb-3">{cls.description}</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="text-gray-400">Startmynt:</div>
+                          <div className="text-right text-yellow-400">{cls.starting_coins || 0} gull</div>
+                          <div className="text-gray-400">Hovedattributt:</div>
+                          <div className="text-right text-blue-400">{cls.primary_attribute || 'Ukjent'}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {currentStep === 'raceSelected' && (
+              <div className="text-center">
+                <button
+                  onClick={() => setShowClassModal(true)}
+                  className="px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-lg font-medium transition-colors duration-200"
+                >
+                  Velg din klasse
+                </button>
+              </div>
+            )}
+
+            {currentStep === 'classSelected' && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <h3 className="text-xl text-yellow-400 mb-4">Velg ditt utseende</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {avatars.map((avatar, index) => (
+                      <div 
+                        key={index} 
+                        onClick={() => handleSelectAvatar(avatar)}
+                        className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                          selectedAvatar === avatar ? 'border-yellow-500 ring-2 ring-yellow-400' : 'border-gray-700 hover:border-gray-500'
+                        }`}
+                      >
+                        <img 
+                          src={avatar.url} 
+                          alt={`${selectedRace.name} avatar ${index + 1}`} 
+                          className="w-full h-32 object-cover"
+                        />
+                        {selectedAvatar === avatar && (
+                          <div className="absolute top-1 right-1 bg-yellow-500 rounded-full p-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-900" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {selectedAvatar && (
+                  <div className="text-center">
+                    <button
+                      onClick={() => setCurrentStep('ready')}
+                      className="px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-lg font-medium transition-colors duration-200"
+                    >
+                      Fortsett
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {currentStep === 'ready' && (
+              <div className="text-center space-y-6">
+                <div className="bg-gray-800 p-4 rounded-lg border border-yellow-600">
+                  <h3 className="text-xl text-yellow-400 mb-2">Din karakter</h3>
+                  <div className="grid grid-cols-2 gap-4 text-left">
+                    <div>
+                      <p className="text-gray-400">Navn:</p>
+                      <p className="text-yellow-400">{character.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Rase:</p>
+                      <p className="text-yellow-400">{selectedRace?.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Klasse:</p>
+                      <p className="text-yellow-400">{selectedClass?.name}</p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSubmit}
+                  className="px-8 py-4 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg text-xl font-medium transition-colors duration-200"
+                >
                   Begynn ditt eventyr
                 </button>
               </div>
-            </form>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
